@@ -1,26 +1,17 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import legacy from '@vitejs/plugin-legacy'
+import { viteSingleFile } from 'vite-plugin-singlefile'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
-    legacy({
-      targets: ['defaults', 'not IE 11'],
-    }),
+    viteSingleFile(),
   ],
   build: {
     target: 'es2017',
-    rollupOptions: {
-      output: {
-        assetFileNames: 'static-assets/[name]-[hash][extname]',
-        chunkFileNames: 'static-assets/[name]-[hash].js',
-        entryFileNames: 'static-assets/[name]-[hash].js',
-      },
-    },
   },
   server: {
     watch: {
