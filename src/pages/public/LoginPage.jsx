@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { Waves, Phone, Lock, Eye, EyeOff } from 'lucide-react';
+import { Phone, Lock, Eye, EyeOff } from 'lucide-react';
 
 export default function LoginPage() {
   const [form, setForm] = useState({ emailOrPhone: '', password: '' });
@@ -59,11 +59,9 @@ export default function LoginPage() {
         }} />
 
         <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', maxWidth: 320 }}>
-          <div style={{ width: 64, height: 64, borderRadius: 14, background: '#4a6fa5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.75rem' }}>
-            <Waves size={32} color="white" />
-          </div>
+          <img src="/logo.svg" alt="Cong thong tin cuu ho ngap lu" className="login-brand-logo" />
           <h1 style={{ fontFamily: "'Lora', serif", color: '#f0ece5', fontSize: '1.6rem', fontWeight: 600, letterSpacing: '-0.01em', marginBottom: '0.625rem' }}>
-            FLOODGUARD<br />HƯƠNG KHÊ
+            CUU HO NGAP LU
           </h1>
           <p style={{ color: '#8a8278', fontSize: '0.82rem', lineHeight: 1.7, marginBottom: '2.5rem' }}>
             Hệ thống cảnh báo lũ lụt & điều phối cứu hộ cho khu vực Hương Khê, Hà Tĩnh.
@@ -90,10 +88,8 @@ export default function LoginPage() {
         <div style={{ width: '100%', maxWidth: 380 }}>
           {/* Mobile logo */}
           <div style={{ textAlign: 'center', marginBottom: '2rem', display: 'none' }} className="show-mobile">
-            <div style={{ width: 48, height: 48, borderRadius: 12, background: '#4a6fa5', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 0.875rem' }}>
-              <Waves size={24} color="white" />
-            </div>
-            <h1 style={{ fontFamily: "'Lora', serif", fontSize: '1.25rem', color: '#2a2520', fontWeight: 600 }}>FLOODGUARD HƯƠNG KHÊ</h1>
+            <img src="/logo.svg" alt="Cong thong tin cuu ho ngap lu" className="login-brand-logo mobile" />
+            <h1 style={{ fontFamily: "'Lora', serif", fontSize: '1.25rem', color: '#2a2520', fontWeight: 600 }}>CUU HO NGAP LU</h1>
           </div>
 
           <div style={{ marginBottom: '1.75rem' }}>

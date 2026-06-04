@@ -1,7 +1,7 @@
 ﻿import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
-import { Waves, AlertTriangle, Phone, MapPin, Loader, CheckCircle, Navigation, X, ChevronDown } from 'lucide-react';
+import { AlertTriangle, Phone, MapPin, Loader, CheckCircle, Navigation, X, ChevronDown } from 'lucide-react';
 import { AREAS } from '../../data/mockData';
 
 const EMERGENCY_TYPES = [
@@ -141,10 +141,8 @@ export default function SOSPage() {
       {/* Header */}
       <div style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 10 }}>
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', textDecoration: 'none' }}>
-          <div style={{ width: 34, height: 34, borderRadius: 8, background: 'rgba(59,130,246,0.2)', border: '1px solid rgba(59,130,246,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            <Waves size={18} color="#60a5fa" />
-          </div>
-          <span style={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: 600 }}>FLOODGUARD HK</span>
+          <img src="/logo.svg" alt="Cong thong tin cuu ho ngap lu" className="brand-logo-image compact" />
+          <span style={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: 600 }}>CUU HO NGAP LU</span>
         </Link>
         <Link to="/login" style={{ color: '#64748b', fontSize: '0.75rem', textDecoration: 'none' }}>Đăng nhập</Link>
       </div>

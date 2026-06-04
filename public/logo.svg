@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 900" role="img" aria-labelledby="title desc">
+  <title id="title">Cong thong tin cuu ho ngap lu</title>
+  <desc id="desc">Logo cong thong tin cuu ho ngap lu voi canh cuu ho, song nuoc, khien bao ve va dinh vi.</desc>
+  <rect width="900" height="900" fill="#ffffff"/>
+  <path d="M205 374C210 150 688 150 695 374" fill="none" stroke="#073f78" stroke-width="20" stroke-linecap="round"/>
+  <path d="M178 395C255 340 321 440 392 392C464 344 519 443 594 397C664 354 706 374 747 405" fill="none" stroke="#0d70b7" stroke-width="22" stroke-linecap="round"/>
+  <path d="M150 438C230 383 312 479 397 425C480 372 531 486 616 425C688 374 748 410 790 447" fill="none" stroke="#073f78" stroke-width="24" stroke-linecap="round"/>
+  <path d="M116 488C205 425 297 532 399 463C503 393 566 540 675 459C749 405 813 449 855 490" fill="none" stroke="#0d70b7" stroke-width="24" stroke-linecap="round"/>
+  <path d="M118 535C224 479 297 576 405 518C511 461 573 583 687 516C760 473 814 500 858 538" fill="none" stroke="#073f78" stroke-width="20" stroke-linecap="round"/>
+  <path d="M276 303h90v70h-90z" fill="#eaf4fb"/>
+  <path d="M246 306l77-72 79 72" fill="#eaf4fb" stroke="#073f78" stroke-width="12" stroke-linejoin="round"/>
+  <path d="M302 373v-42h36v42" fill="#0d70b7"/>
+  <path d="M226 385c52-20 121-21 180 0" fill="none" stroke="#0d70b7" stroke-width="12" stroke-linecap="round"/>
+  <path d="M666 215v176M710 245v144M618 279v111" fill="none" stroke="#073f78" stroke-width="12" stroke-linecap="round"/>
+  <path d="M606 253h122M596 299h148" fill="none" stroke="#073f78" stroke-width="12" stroke-linecap="round"/>
+  <path d="M629 246c36 10 69 21 101 34" fill="none" stroke="#78a7ca" stroke-width="6"/>
+  <path d="M256 183c12-26 55-28 71-7 25-7 57 8 62 34 26 2 41 15 45 34H229c-6-25 3-48 27-61z" fill="#8fb5cf" opacity=".75"/>
+  <path d="M560 182c19-30 73-27 89 2 30-7 62 8 72 35 25 0 44 16 48 37H539c-3-33 5-59 21-74z" fill="#8fb5cf" opacity=".75"/>
+  <path d="M242 262l-20 54M291 262l-19 52M342 262l-20 54M592 275l-21 55M646 275l-20 54M700 275l-20 54" fill="none" stroke="#b6c8d6" stroke-width="5" stroke-linecap="round" opacity=".7"/>
+  <circle cx="454" cy="311" r="116" fill="#fff7ef" stroke="#f36a17" stroke-width="16"/>
+  <path d="M365 244a116 116 0 0 1 178 0l-44 66H409z" fill="#ff8b24"/>
+  <path d="M350 311h208M454 201v226" fill="none" stroke="#f36a17" stroke-width="12"/>
+  <path d="M320 395c94-30 175-33 280 0 50 16 52 90 0 102-99 23-186 23-280 0-52-13-50-86 0-102z" fill="#f36a17"/>
+  <path d="M326 428c95 24 184 24 274 0" fill="none" stroke="#b9470e" stroke-width="10" opacity=".55"/>
+  <path d="M426 273c-22-9-42 10-49 37l-22 70h57l25-75c5-14 3-26-11-32z" fill="#c74b0e"/>
+  <circle cx="425" cy="244" r="25" fill="#d95714"/>
+  <path d="M392 222h64c-7-24-23-36-50-34-14 8-22 19-14 34z" fill="#f36a17"/>
+  <path d="M424 204v30M409 219h31" fill="none" stroke="#fff" stroke-width="9"/>
+  <path d="M447 307c33 34 62 51 99 38" fill="none" stroke="#c74b0e" stroke-width="18" stroke-linecap="round"/>
+  <circle cx="573" cy="308" r="28" fill="#d95714"/>
+  <path d="M541 295c18-23 48-31 75-10" fill="none" stroke="#ff8b24" stroke-width="13" stroke-linecap="round"/>
+  <path d="M450 590l111-55 111 55v96c0 88-56 146-111 171-55-25-111-83-111-171z" fill="#fff" stroke="#073f78" stroke-width="18" stroke-linejoin="round"/>
+  <path d="M493 676c33 39 79 49 125 14" fill="none" stroke="#073f78" stroke-width="24" stroke-linecap="round"/>
+  <path d="M501 699l62-69 66 64" fill="none" stroke="#073f78" stroke-width="19" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M560 595c-35 0-63 28-63 63 0 50 63 111 63 111s63-61 63-111c0-35-28-63-63-63z" fill="#1678bf"/>
+  <circle cx="560" cy="657" r="22" fill="#fff"/>
+  <g text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-weight="800">
+    <text x="450" y="704" font-size="58" fill="#073f78">C&#7892;NG TH&#212;NG TIN</text>
+    <text x="450" y="785" font-size="72" fill="#f36a17">C&#7912;U H&#7896; NG&#7852;P L&#360;</text>
+  </g>
+  <g transform="translate(225 830)">
+    <path d="M0 0h146" stroke="#073f78" stroke-width="6"/>
+    <circle cx="194" cy="0" r="28" fill="#073f78"/>
+    <path d="M184-5h18M184 7h18M204-14l12-10M204 14l12 10" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="280" cy="0" r="28" fill="#1678bf"/>
+    <path d="M280-17c-13 0-23 10-23 23 0 18 23 39 23 39s23-21 23-39c0-13-10-23-23-23z" fill="#fff"/>
+    <circle cx="280" cy="4" r="8" fill="#1678bf"/>
+    <circle cx="366" cy="0" r="28" fill="#f36a17"/>
+    <path d="M350-16l32 32M382-16l-32 32M366-23v46M343 0h46" stroke="#fff" stroke-width="6" stroke-linecap="round"/>
+    <path d="M414 0h146" stroke="#073f78" stroke-width="6"/>
+  </g>
+</svg>

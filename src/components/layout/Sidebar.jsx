@@ -4,7 +4,7 @@ import { useData } from '../../contexts/DataContext';
 import {
   LayoutDashboard, Bell, BellRing, Users, Shield, Map, MessageSquare,
   Navigation, AlertTriangle, FileText, BarChart3, Activity, Bot,
-  Settings, LogOut, X, Waves, Home, Route, Droplets,
+  Settings, LogOut, X, Home, Route, Droplets,
   Building2, ClipboardList, Anchor
 } from 'lucide-react';
 
@@ -109,6 +109,16 @@ function LogoutRow({ onClick }) {
   );
 }
 
+function BrandMark() {
+  return (
+    <img
+      src="/logo.svg"
+      alt="Cong thong tin cuu ho ngap lu"
+      className="brand-logo-image compact"
+    />
+  );
+}
+
 export function AdminSidebar({ isOpen, onClose }) {
   const { currentUser, logout } = useAuth();
   const { notifications, rescueRequests } = useData();
@@ -122,12 +132,10 @@ export function AdminSidebar({ isOpen, onClose }) {
       <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
         {/* Logo */}
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon">
-            <Waves size={18} color="white" />
-          </div>
+          <BrandMark />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="sidebar-logo-title">FLOODGUARD</div>
-            <div className="sidebar-logo-subtitle">Hương Khê · Hà Tĩnh</div>
+            <div className="sidebar-logo-title">CUU HO NGAP LU</div>
+            <div className="sidebar-logo-subtitle">Cong thong tin</div>
           </div>
           <button onClick={onClose} style={{ color: '#6b6360', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
             <X size={16} />
@@ -202,12 +210,10 @@ export function RescueSidebar({ isOpen, onClose }) {
       <div className={`sidebar-overlay ${isOpen ? 'active' : ''}`} onClick={onClose} />
       <aside className={`sidebar ${isOpen ? 'open' : ''}`} style={{ background: '#212a25' }}>
         <div className="sidebar-logo" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
-          <div className="sidebar-logo-icon" style={{ background: '#3a6b4a' }}>
-            <Shield size={18} color="white" />
-          </div>
+          <BrandMark />
           <div style={{ flex: 1 }}>
-            <div className="sidebar-logo-title">ĐỘI CỨU HỘ</div>
-            <div className="sidebar-logo-subtitle">FloodGuard Hương Khê</div>
+            <div className="sidebar-logo-title">DOI CUU HO</div>
+            <div className="sidebar-logo-subtitle">Cuu ho ngap lu</div>
           </div>
         </div>
 
@@ -250,12 +256,10 @@ export function CitizenSidebar({ isOpen, onClose }) {
       <div className={`sidebar-overlay ${isOpen ? 'active' : ''}`} onClick={onClose} />
       <aside className={`sidebar ${isOpen ? 'open' : ''}`} style={{ background: '#212535' }}>
         <div className="sidebar-logo">
-          <div className="sidebar-logo-icon" style={{ background: '#4a6fa5' }}>
-            <Waves size={18} color="white" />
-          </div>
+          <BrandMark />
           <div style={{ flex: 1 }}>
-            <div className="sidebar-logo-title">FLOODGUARD</div>
-            <div className="sidebar-logo-subtitle">Cổng người dân</div>
+            <div className="sidebar-logo-title">CUU HO NGAP LU</div>
+            <div className="sidebar-logo-subtitle">Cong nguoi dan</div>
           </div>
         </div>
 

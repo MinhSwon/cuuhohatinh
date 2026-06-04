@@ -1,6 +1,6 @@
 ﻿import { Link } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
-import { Waves, AlertTriangle, Phone, MapPin, Shield, Users, Building2, Bell, Navigation } from 'lucide-react';
+import { AlertTriangle, Phone, MapPin, Shield, Users, Building2, Bell, Navigation } from 'lucide-react';
 import { LevelBadge } from '../../components/common/StatusBadge';
 
 export default function HomePage() {
@@ -42,15 +42,13 @@ export default function HomePage() {
       }}>
         <div style={{ maxWidth: 1160, margin: '0 auto', display: 'flex', alignItems: 'center', justifyContent: 'space-between', height: 60 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <div style={{ width: 34, height: 34, borderRadius: 7, background: '#4a6fa5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Waves size={18} color="white" />
-            </div>
+            <img src="/logo.svg" alt="Cong thong tin cuu ho ngap lu" className="brand-logo-image compact" />
             <div>
               <div style={{ fontFamily: "'Lora', serif", color: '#f0ece5', fontWeight: 600, fontSize: '0.92rem', letterSpacing: '0.01em' }}>
-                FLOODGUARD HƯƠNG KHÊ
+                CUU HO NGAP LU
               </div>
               <div style={{ color: '#9e9282', fontSize: '0.6rem', letterSpacing: '0.05em' }}>
-                HỆ THỐNG CẢNH BÁO LŨ LỤT · HÀ TĨNH
+                CONG THONG TIN CUU HO
               </div>
             </div>
           </div>
@@ -258,8 +256,8 @@ export default function HomePage() {
       {/* Footer */}
       <footer style={{ background: '#2d2825', borderTop: '1px solid rgba(255,255,255,0.05)', padding: '1.5rem 2rem', marginTop: '3rem', textAlign: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', marginBottom: '0.375rem' }}>
-          <Waves size={16} color="#6b8ab8" />
-          <span style={{ fontFamily: "'Lora', serif", color: '#c8c0b5', fontWeight: 500, fontSize: '0.85rem' }}>FLOODGUARD HƯƠNG KHÊ</span>
+          <img src="/logo.svg" alt="Cong thong tin cuu ho ngap lu" style={{ width: 28, height: 28, objectFit: 'contain', borderRadius: 4, background: '#fff' }} />
+          <span style={{ fontFamily: "'Lora', serif", color: '#c8c0b5', fontWeight: 500, fontSize: '0.85rem' }}>CUU HO NGAP LU</span>
         </div>
         <p style={{ fontSize: '0.68rem', color: '#6b6360' }}>Hệ thống cảnh báo lũ lụt & điều phối cứu hộ · Huyện Hương Khê, Tỉnh Hà Tĩnh</p>
       </footer>

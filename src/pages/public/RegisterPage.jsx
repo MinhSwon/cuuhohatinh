@@ -2,7 +2,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
-import { Waves, Phone, Lock, User, MapPin } from 'lucide-react';
+import { Phone, Lock, User, MapPin } from 'lucide-react';
 import { AREAS } from '../../data/mockData';
 
 export default function RegisterPage() {
@@ -75,17 +75,9 @@ export default function RegisterPage() {
     }}>
       <div style={{ width: '100%', maxWidth: 520 }}>
         <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
-          <div style={{
-            width: 54, height: 54, borderRadius: 12,
-            background: '#4a6fa5',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 0.75rem',
-            boxShadow: '0 4px 12px rgba(74,111,165,0.15)'
-          }}>
-            <Waves size={26} color="white" />
-          </div>
-          <h1 style={{ fontFamily: "'Lora', serif", color: '#2a2520', fontSize: '1.45rem', fontWeight: 600, letterSpacing: '-0.01em' }}>FLOODGUARD HƯƠNG KHÊ</h1>
-          <p style={{ color: '#9e9282', fontSize: '0.78rem', marginTop: 4 }}>CỔNG ĐĂNG KÝ NHẬN CẢNH BÁO LŨ & HỖ TRỢ</p>
+          <img src="/logo.svg" alt="Cong thong tin cuu ho ngap lu" className="login-brand-logo mobile" />
+          <h1 style={{ fontFamily: "'Lora', serif", color: '#2a2520', fontSize: '1.45rem', fontWeight: 600, letterSpacing: '-0.01em' }}>CUU HO NGAP LU</h1>
+          <p style={{ color: '#9e9282', fontSize: '0.78rem', marginTop: 4 }}>CONG DANG KY NHAN CANH BAO LU & HO TRO</p>
         </div>
 
         <div style={{
