@@ -527,6 +527,111 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
   }
 });
 
+app.post('/api/auth/register', publicWriteLimiter, async (req, res) => {
+  try {
+    const normalize = value => (typeof value === 'string' ? value.trim() : '');
+    const {
+      full_name,
+      phone,
+      email,
+      password,
+      area_id,
+      area_name,
+      address_detail,
+      household_size,
+      has_elderly,
+      has_children,
+      has_disabled,
+      emergency_contact_name,
+      emergency_contact_phone,
+    } = sanitizeObject(req.body || {});
+
+    const cleanName = normalize(full_name);
+    const cleanPhone = normalize(phone);
+    const cleanEmail = normalize(email).toLowerCase();
+    const cleanPassword = normalize(password);
+
+    if (!cleanName || !cleanPhone || !cleanPassword || !normalize(area_id)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vui long nhap day du ho ten, so dien thoai, mat khau va khu vuc'
+      });
+    }
+
+    if (cleanPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mat khau phai co it nhat 6 ky tu'
+      });
+    }
+
+    const users = Array.isArray(db.users) ? db.users : [];
+    const duplicatedUser = users.find(user => {
+      const userPhone = normalize(user?.phone);
+      const userEmail = normalize(user?.email).toLowerCase();
+      return userPhone === cleanPhone || (cleanEmail && userEmail === cleanEmail);
+    });
+
+    if (duplicatedUser) {
+      return res.status(409).json({
+        success: false,
+        message: 'So dien thoai hoac email da duoc dang ky'
+      });
+    }
+
+    const area = (Array.isArray(db.areas) ? db.areas : []).find(item => item.id === area_id);
+    const userId = `user-${Date.now()}`;
+    const profileId = `cp-${Date.now()}`;
+    const now = new Date().toISOString();
+    const user = {
+      id: userId,
+      full_name: cleanName,
+      phone: cleanPhone,
+      email: cleanEmail || null,
+      password_hash: await bcrypt.hash(cleanPassword, 12),
+      role: 'CITIZEN',
+      status: 'ACTIVE',
+      created_at: now,
+      avatar: null,
+    };
+    const profile = {
+      id: profileId,
+      user_id: userId,
+      area_id,
+      area_name: area?.old_name || area?.current_name || normalize(area_name),
+      village_name: '',
+      address_detail: normalize(address_detail),
+      household_size: Number.parseInt(household_size, 10) || 1,
+      elderly_count: has_elderly ? 1 : 0,
+      children_count: has_children ? 1 : 0,
+      disabled_count: has_disabled ? 1 : 0,
+      medical_note: '',
+      emergency_contact_name: normalize(emergency_contact_name),
+      emergency_contact_phone: normalize(emergency_contact_phone),
+      latitude: null,
+      longitude: null,
+      sms_opt_in: true,
+    };
+
+    db.users.push(user);
+    if (!Array.isArray(db.citizenProfiles)) db.citizenProfiles = [];
+    db.citizenProfiles.push(profile);
+    saveDb();
+
+    return res.status(201).json({
+      success: true,
+      user: safeUser(user),
+      profile
+    });
+  } catch (err) {
+    console.error('Register route failed:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'May chu dang loi dang ky, vui long thu lai'
+    });
+  }
+});
+
 app.use('/api/auth/login-legacy', (req, res) => {
   res.status(410).json({ success: false, message: 'Legacy login endpoint has been disabled' });
 });

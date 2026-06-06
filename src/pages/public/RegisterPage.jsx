@@ -1,5 +1,6 @@
 ﻿import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Phone, Lock, User, MapPin } from 'lucide-react';
@@ -17,51 +18,37 @@ export default function RegisterPage() {
   const toast = useToast();
   const navigate = useNavigate();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (form.password !== form.confirm_password) {
       toast.error('Mật khẩu xác nhận không khớp!');
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      const userId = `user-${Date.now()}`;
-      const newUser = {
-        id: userId,
-        full_name: form.full_name,
-        phone: form.phone,
-        email: form.email,
-        role: 'CITIZEN',
-        status: 'ACTIVE',
-        created_at: new Date().toISOString(),
-      };
-      setUsers(prev => [...prev, newUser]);
+    try {
+      const selectedArea = AREAS.find(area => area.id === form.area_id);
+      const res = await axios.post('/api/auth/register', {
+        ...form,
+        area_name: selectedArea?.old_name || selectedArea?.current_name || '',
+      });
 
-      if (form.area_id) {
-        const profile = {
-          id: `cp-${Date.now()}`,
-          user_id: userId,
-          area_id: form.area_id,
-          village_name: '',
-          address_detail: form.address_detail,
-          household_size: parseInt(form.household_size),
-          elderly_count: form.has_elderly ? 1 : 0,
-          children_count: form.has_children ? 1 : 0,
-          disabled_count: form.has_disabled ? 1 : 0,
-          medical_note: '',
-          emergency_contact_name: form.emergency_contact_name,
-          emergency_contact_phone: form.emergency_contact_phone,
-          latitude: null,
-          longitude: null,
-          sms_opt_in: true,
-        };
-        setCitizenProfiles(prev => [...prev, profile]);
+      if (res.data?.success) {
+        if (res.data.user) {
+          setUsers(prev => [...prev.filter(user => user.id !== res.data.user.id), res.data.user]);
+        }
+        if (res.data.profile) {
+          setCitizenProfiles(prev => [...prev.filter(profile => profile.id !== res.data.profile.id), res.data.profile]);
+        }
+        toast.success('Đăng ký thành công! Vui lòng đăng nhập.');
+        navigate('/login');
+      } else {
+        toast.error(res.data?.message || 'Đăng ký không thành công!');
       }
-
-      toast.success('Đăng ký thành công! Vui lòng đăng nhập.');
-      navigate('/login');
+    } catch (err) {
+      toast.error(err.response?.data?.message || 'Lỗi kết nối đến máy chủ');
+    } finally {
       setLoading(false);
-    }, 800);
+    }
   };
 
   return (
