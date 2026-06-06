@@ -33,6 +33,10 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
 const IS_DEPLOYED_RUNTIME = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
 const DB_FILE = process.env.DB_FILE ? path.resolve(process.env.DB_FILE) : path.join(__dirname, 'db.json');
 const DIST_DIR = path.join(__dirname, 'dist');
+const parsePositiveInt = (value, fallback) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
 const allowedOrigins = (process.env.CLIENT_ORIGINS || '')
   .split(',')
   .map(origin => origin.trim())
@@ -94,22 +98,36 @@ app.use(cors({
 }));
 app.use(express.json({ limit: '1mb' }));
 
+const apiRateLimit = parsePositiveInt(
+  process.env.API_RATE_LIMIT,
+  IS_DEPLOYED_RUNTIME ? 500 : 5000
+);
+const authRateLimit = parsePositiveInt(
+  process.env.AUTH_RATE_LIMIT,
+  IS_DEPLOYED_RUNTIME ? 10 : 100
+);
+const publicWriteRateLimit = parsePositiveInt(
+  process.env.PUBLIC_WRITE_RATE_LIMIT,
+  IS_DEPLOYED_RUNTIME ? 20 : 200
+);
+
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 500,
+  limit: apiRateLimit,
   standardHeaders: true,
   legacyHeaders: false,
 });
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 10,
+  limit: authRateLimit,
   standardHeaders: true,
   legacyHeaders: false,
+  skipSuccessfulRequests: true,
   message: { success: false, message: 'Qua nhieu lan thu, vui long thu lai sau' },
 });
 const publicWriteLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
-  limit: 20,
+  limit: publicWriteRateLimit,
   standardHeaders: true,
   legacyHeaders: false,
 });

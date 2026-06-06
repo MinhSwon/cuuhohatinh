@@ -39,7 +39,9 @@ axios.interceptors.response.use(
   async error => {
     const config = error.config;
     const isApiRequest = typeof config?.url === 'string' && config.url.startsWith('/api/');
-    const canRetry = isApiRequest && !error.response && !config.__renderFallbackRetried;
+    const hostname = typeof window === 'undefined' ? '' : window.location.hostname;
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+    const canRetry = isApiRequest && !isLocal && !error.response && !config.__renderFallbackRetried;
 
     if (canRetry) {
       config.__renderFallbackRetried = true;
