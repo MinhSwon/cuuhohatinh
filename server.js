@@ -499,6 +499,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     const normalize = value => (typeof value === 'string' ? value.trim() : '');
     const { emailOrPhone, password } = req.body || {};
     const credential = normalize(emailOrPhone).toLowerCase();
+    const phoneCredential = normalize(emailOrPhone).replace(/[\s.-]/g, '');
     const plainPassword = normalize(password);
 
     if (!credential || !plainPassword) {
@@ -519,8 +520,8 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
     const user = users.find(u => {
       const email = normalize(u?.email).toLowerCase();
-      const phone = normalize(u?.phone);
-      return email === credential || phone === credential;
+      const phone = normalize(u?.phone).replace(/[\s.-]/g, '');
+      return email === credential || phone === phoneCredential;
     });
 
     if (!user || user.status === 'BLOCKED' || !(await verifyPassword(user, plainPassword))) {
@@ -548,6 +549,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 app.post('/api/auth/register', publicWriteLimiter, async (req, res) => {
   try {
     const normalize = value => (typeof value === 'string' ? value.trim() : '');
+    const normalizePhone = value => normalize(value).replace(/[\s.-]/g, '');
     const {
       full_name,
       phone,
@@ -565,7 +567,7 @@ app.post('/api/auth/register', publicWriteLimiter, async (req, res) => {
     } = sanitizeObject(req.body || {});
 
     const cleanName = normalize(full_name);
-    const cleanPhone = normalize(phone);
+    const cleanPhone = normalizePhone(phone);
     const cleanEmail = normalize(email).toLowerCase();
     const cleanPassword = normalize(password);
 
@@ -584,16 +586,22 @@ app.post('/api/auth/register', publicWriteLimiter, async (req, res) => {
     }
 
     const users = Array.isArray(db.users) ? db.users : [];
-    const duplicatedUser = users.find(user => {
-      const userPhone = normalize(user?.phone);
-      const userEmail = normalize(user?.email).toLowerCase();
-      return userPhone === cleanPhone || (cleanEmail && userEmail === cleanEmail);
-    });
+    const duplicatedPhoneUser = users.find(user => normalizePhone(user?.phone) === cleanPhone);
+    const duplicatedEmailUser = cleanEmail
+      ? users.find(user => normalize(user?.email).toLowerCase() === cleanEmail)
+      : null;
 
-    if (duplicatedUser) {
+    if (duplicatedPhoneUser) {
       return res.status(409).json({
         success: false,
-        message: 'So dien thoai hoac email da duoc dang ky'
+        message: `So dien thoai ${cleanPhone} da duoc dang ky`
+      });
+    }
+
+    if (duplicatedEmailUser) {
+      return res.status(409).json({
+        success: false,
+        message: `Email ${cleanEmail} da duoc dang ky`
       });
     }
 
