@@ -31,12 +31,15 @@ const DATABASE_URL = process.env.DATABASE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('base64url');
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
 const IS_DEPLOYED_RUNTIME = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+const DB_CONNECT_RETRIES = Number(process.env.DB_CONNECT_RETRIES || 8);
+const DB_CONNECT_RETRY_DELAY_MS = Number(process.env.DB_CONNECT_RETRY_DELAY_MS || 3000);
 const DB_FILE = process.env.DB_FILE ? path.resolve(process.env.DB_FILE) : path.join(__dirname, 'db.json');
 const DIST_DIR = path.join(__dirname, 'dist');
 const parsePositiveInt = (value, fallback) => {
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 };
+const BCRYPT_ROUNDS = parsePositiveInt(process.env.BCRYPT_ROUNDS, 10);
 const allowedOrigins = (process.env.CLIENT_ORIGINS || '')
   .split(',')
   .map(origin => origin.trim())
@@ -58,6 +61,7 @@ const pool = DATABASE_URL
     })
   : null;
 let writeQueue = Promise.resolve();
+const sseClients = new Map();
 
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
@@ -108,7 +112,7 @@ const authRateLimit = parsePositiveInt(
 );
 const publicWriteRateLimit = parsePositiveInt(
   process.env.PUBLIC_WRITE_RATE_LIMIT,
-  IS_DEPLOYED_RUNTIME ? 20 : 200
+  IS_DEPLOYED_RUNTIME ? 300 : 300
 );
 
 const apiLimiter = rateLimit({
@@ -190,6 +194,85 @@ const VULNERABLE_HOUSEHOLD_FIELDS = [
 ];
 const SMS_LOG_FIELDS = ['recipient', 'phone', 'message', 'status', 'provider', 'error', 'user_id', 'flood_warning_id', 'floodAlertId'];
 
+function createId(prefix) {
+  return `${prefix}-${crypto.randomUUID()}`;
+}
+
+function toPgTimestamp(value) {
+  return value ? new Date(value) : null;
+}
+
+function toIsoString(value) {
+  return value instanceof Date ? value.toISOString() : value || null;
+}
+
+function userRowToApi(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    full_name: row.full_name,
+    phone: row.phone,
+    email: row.email,
+    password_hash: row.password_hash,
+    role: row.role,
+    status: row.status,
+    avatar: row.avatar,
+    created_at: toIsoString(row.created_at),
+    updated_at: toIsoString(row.updated_at),
+  };
+}
+
+function citizenProfileRowToApi(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    area_id: row.area_id,
+    area_name: row.area_name,
+    village_name: row.village_name || '',
+    address_detail: row.address_detail,
+    household_size: row.household_size,
+    elderly_count: row.elderly_count,
+    children_count: row.children_count,
+    disabled_count: row.disabled_count,
+    medical_note: row.medical_note || '',
+    emergency_contact_name: row.emergency_contact_name || '',
+    emergency_contact_phone: row.emergency_contact_phone || '',
+    latitude: row.latitude,
+    longitude: row.longitude,
+    sms_opt_in: row.sms_opt_in,
+    created_at: toIsoString(row.created_at),
+    updated_at: toIsoString(row.updated_at),
+  };
+}
+
+function rescueRequestRowToApi(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    full_name: row.full_name,
+    phone: row.phone,
+    area_id: row.area_id,
+    area_name: row.area_name,
+    address_detail: row.address_detail,
+    description: row.description,
+    note: row.note,
+    number_of_people: row.number_of_people,
+    emergency_level: row.emergency_level,
+    latitude: row.latitude,
+    longitude: row.longitude,
+    status: row.status,
+    assigned_team_id: row.assigned_team_id,
+    assigned_team_name: row.assigned_team_name,
+    user_id: row.created_by_user_id,
+    created_by_user_id: row.created_by_user_id,
+    created_at: toIsoString(row.created_at),
+    accepted_at: toIsoString(row.accepted_at),
+    completed_at: toIsoString(row.completed_at),
+    updated_at: toIsoString(row.updated_at),
+  };
+}
+
 function sanitizeObject(value) {
   if (Array.isArray(value)) {
     return value.map(sanitizeObject);
@@ -229,26 +312,135 @@ function safeUser(user) {
 function sanitizeDbForUser(user) {
   const publicDb = {
     areas: db.areas,
-    floodWarnings: db.floodWarnings,
+    floodWarnings: Array.isArray(db.floodWarnings)
+      ? db.floodWarnings.filter(w => w.status === 'PUBLISHED')
+      : [],
     safeZones: db.safeZones,
     dams: db.dams,
   };
 
   if (!user) {
-    return publicDb;
+    return sanitizeObject(publicDb);
   }
 
-  const safeDb = {
-    ...db,
-    users: Array.isArray(db.users) ? db.users.map(safeUser) : [],
-  };
+  const ownNotifications = Array.isArray(db.notifications)
+    ? db.notifications.filter(n => !n.user_id || n.user_id === user.id)
+    : [];
 
-  if (!ADMIN_ROLES.includes(user.role)) {
-    delete safeDb.smsLogs;
-    delete safeDb.activityLogs;
+  if (ADMIN_ROLES.includes(user.role)) {
+    return sanitizeObject({
+      ...db,
+      users: Array.isArray(db.users) ? db.users.map(safeUser) : [],
+    });
   }
 
-  return sanitizeObject(safeDb);
+  if (RESCUE_ROLES.includes(user.role)) {
+    const teams = Array.isArray(db.rescueTeams) ? db.rescueTeams : [];
+    const visibleTeamIds = new Set(
+      teams
+        .filter(team => team.leader_user_id === user.id || team.leader_id === user.id || team.user_id === user.id)
+        .map(team => team.id)
+    );
+
+    const missions = Array.isArray(db.rescueMissions)
+      ? db.rescueMissions.filter(m => visibleTeamIds.size === 0 || visibleTeamIds.has(m.rescue_team_id))
+      : [];
+    const visibleRequestIds = new Set(missions.map(m => m.rescue_request_id));
+
+    return sanitizeObject({
+      ...publicDb,
+      rescueTeams: teams,
+      rescueRoutes: db.rescueRoutes,
+      rescueMissions: missions,
+      rescueRequests: Array.isArray(db.rescueRequests)
+        ? db.rescueRequests.filter(r => visibleRequestIds.size === 0 || visibleRequestIds.has(r.id) || visibleTeamIds.has(r.assigned_team_id))
+        : [],
+      missionStatusLogs: Array.isArray(db.missionStatusLogs)
+        ? db.missionStatusLogs.filter(log => missions.some(m => m.id === log.mission_id))
+        : [],
+      notifications: ownNotifications,
+    });
+  }
+
+  const ownProfiles = Array.isArray(db.citizenProfiles)
+    ? db.citizenProfiles.filter(profile => profile.user_id === user.id)
+    : [];
+  const ownProfileIds = new Set(ownProfiles.map(profile => profile.id));
+
+  return sanitizeObject({
+    ...publicDb,
+    user: safeUser(findUserById(user.id)),
+    citizenProfiles: ownProfiles,
+    rescueRequests: Array.isArray(db.rescueRequests)
+      ? db.rescueRequests.filter(r => r.user_id === user.id || r.citizen_id === user.id)
+      : [],
+    vulnerableHouseholds: Array.isArray(db.vulnerableHouseholds)
+      ? db.vulnerableHouseholds.filter(h => ownProfileIds.has(h.citizen_profile_id) || h.user_id === user.id)
+      : [],
+    notifications: ownNotifications,
+  });
+}
+
+async function sanitizeDbForUserFromPostgres(user) {
+  const base = sanitizeDbForUser(user);
+  if (!pool || !user) return base;
+
+  const userResult = await pool.query(
+    `SELECT id, full_name, phone, email, password_hash, role::text, status::text, avatar, created_at, updated_at
+     FROM users
+     WHERE id = $1`,
+    [user.id]
+  );
+  const currentUser = userRowToApi(userResult.rows[0]) || user;
+
+  if (ADMIN_ROLES.includes(currentUser.role)) {
+    const [usersResult, profilesResult, requestsResult] = await Promise.all([
+      pool.query(`SELECT id, full_name, phone, email, password_hash, role::text, status::text, avatar, created_at, updated_at FROM users ORDER BY created_at DESC`),
+      pool.query(`SELECT * FROM citizen_profiles ORDER BY created_at DESC`),
+      pool.query(`SELECT *, status::text, emergency_level::text FROM rescue_requests ORDER BY created_at DESC LIMIT 1000`),
+    ]);
+
+    return sanitizeObject({
+      ...base,
+      user: safeUser(currentUser),
+      users: usersResult.rows.map(row => safeUser(userRowToApi(row))),
+      citizenProfiles: profilesResult.rows.map(citizenProfileRowToApi),
+      rescueRequests: requestsResult.rows.map(rescueRequestRowToApi),
+    });
+  }
+
+  if (RESCUE_ROLES.includes(currentUser.role)) {
+    const requestsResult = await pool.query(
+      `SELECT *, status::text, emergency_level::text
+       FROM rescue_requests
+       ORDER BY created_at DESC
+       LIMIT 1000`
+    );
+
+    return sanitizeObject({
+      ...base,
+      user: safeUser(currentUser),
+      rescueRequests: requestsResult.rows.map(rescueRequestRowToApi),
+    });
+  }
+
+  const [profilesResult, requestsResult] = await Promise.all([
+    pool.query(`SELECT * FROM citizen_profiles WHERE user_id = $1 ORDER BY created_at DESC`, [currentUser.id]),
+    pool.query(
+      `SELECT *, status::text, emergency_level::text
+       FROM rescue_requests
+       WHERE created_by_user_id = $1
+       ORDER BY created_at DESC`,
+      [currentUser.id]
+    ),
+  ]);
+
+  return sanitizeObject({
+    ...base,
+    user: safeUser(currentUser),
+    citizenProfiles: profilesResult.rows.map(citizenProfileRowToApi),
+    rescueRequests: requestsResult.rows.map(rescueRequestRowToApi),
+  });
 }
 
 function applySeedPasswords() {
@@ -310,9 +502,14 @@ function findUserById(id) {
   return (Array.isArray(db.users) ? db.users : []).find(user => user.id === id);
 }
 
-function authenticateOptional(req, res, next) {
+function getRequestToken(req) {
   const authHeader = req.get('authorization') || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
+  if (authHeader.startsWith('Bearer ')) return authHeader.slice(7);
+  return typeof req.query?.token === 'string' ? req.query.token : '';
+}
+
+function authenticateOptional(req, res, next) {
+  const token = getRequestToken(req);
 
   if (!token) return next();
 
@@ -321,12 +518,49 @@ function authenticateOptional(req, res, next) {
     const user = findUserById(payload.sub);
     if (user && user.status !== 'BLOCKED') {
       req.user = safeUser(user);
+    } else if (payload.sub && payload.role) {
+      req.user = safeUser({
+        id: payload.sub,
+        full_name: payload.name || '',
+        role: payload.role,
+        status: 'ACTIVE',
+      });
     }
   } catch {
     req.authError = true;
   }
 
   return next();
+}
+
+function writeSse(res, event, payload) {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+async function getRealtimeStateForUser(user) {
+  return pool ? sanitizeDbForUserFromPostgres(user) : sanitizeDbForUser(user);
+}
+
+function broadcastDbUpdate(reason, changedCollections = []) {
+  if (sseClients.size === 0) return;
+
+  for (const [clientId, client] of sseClients) {
+    getRealtimeStateForUser(client.user)
+      .then(data => {
+        writeSse(client.res, 'db:update', {
+          reason,
+          changedCollections,
+          timestamp: new Date().toISOString(),
+          data,
+        });
+      })
+      .catch(err => {
+        console.error('Failed to broadcast realtime update:', err);
+        sseClients.delete(clientId);
+        client.res.end();
+      });
+  }
 }
 
 function requireAuth(req, res, next) {
@@ -355,14 +589,207 @@ async function verifyPassword(user, plainPassword) {
 
   const isLegacyMatch = storedPassword === plainPassword;
   if (isLegacyMatch) {
-    user.password_hash = await bcrypt.hash(plainPassword, 12);
+    user.password_hash = await bcrypt.hash(plainPassword, BCRYPT_ROUNDS);
     saveDb();
   }
   return isLegacyMatch;
 }
 
+async function ensureRelationalTables() {
+  if (!pool) return;
+
+  await pool.query(`
+    DO $$
+    BEGIN
+      CREATE TYPE "UserRole" AS ENUM ('ADMIN', 'RESCUE_LEADER', 'RESCUE_MEMBER', 'CITIZEN');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+
+    DO $$
+    BEGIN
+      CREATE TYPE "UserStatus" AS ENUM ('ACTIVE', 'INACTIVE', 'BLOCKED');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+
+    DO $$
+    BEGIN
+      CREATE TYPE "RescueRequestStatus" AS ENUM ('PENDING', 'ASSIGNED', 'ACCEPTED', 'MOVING', 'NEAR_VICTIM', 'ARRIVED_CONFIRMED', 'RESCUING', 'RESCUED', 'TRANSFERRED_SAFEZONE', 'UNREACHABLE', 'NEED_SUPPORT', 'CANCELLED');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+
+    DO $$
+    BEGIN
+      CREATE TYPE "AlertLevel" AS ENUM ('LOW', 'MEDIUM', 'HIGH', 'EMERGENCY');
+    EXCEPTION WHEN duplicate_object THEN NULL;
+    END $$;
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      full_name TEXT NOT NULL,
+      phone TEXT UNIQUE,
+      email TEXT UNIQUE,
+      password_hash TEXT NOT NULL,
+      role "UserRole" NOT NULL DEFAULT 'CITIZEN',
+      status "UserStatus" NOT NULL DEFAULT 'ACTIVE',
+      avatar TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS citizen_profiles (
+      id TEXT PRIMARY KEY,
+      user_id TEXT UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+      area_id TEXT,
+      area_name TEXT,
+      village_name TEXT DEFAULT '',
+      address_detail TEXT,
+      household_size INTEGER NOT NULL DEFAULT 1,
+      elderly_count INTEGER NOT NULL DEFAULT 0,
+      children_count INTEGER NOT NULL DEFAULT 0,
+      disabled_count INTEGER NOT NULL DEFAULT 0,
+      medical_note TEXT DEFAULT '',
+      emergency_contact_name TEXT DEFAULT '',
+      emergency_contact_phone TEXT DEFAULT '',
+      latitude DOUBLE PRECISION,
+      longitude DOUBLE PRECISION,
+      sms_opt_in BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    CREATE TABLE IF NOT EXISTS rescue_requests (
+      id TEXT PRIMARY KEY,
+      full_name TEXT NOT NULL,
+      phone TEXT,
+      area_id TEXT,
+      area_name TEXT,
+      address_detail TEXT,
+      description TEXT,
+      note TEXT,
+      number_of_people INTEGER NOT NULL DEFAULT 1,
+      emergency_level "AlertLevel" NOT NULL DEFAULT 'HIGH',
+      latitude DOUBLE PRECISION,
+      longitude DOUBLE PRECISION,
+      status "RescueRequestStatus" NOT NULL DEFAULT 'PENDING',
+      assigned_team_id TEXT,
+      assigned_team_name TEXT,
+      created_by_user_id TEXT REFERENCES users(id) ON DELETE SET NULL,
+      accepted_at TIMESTAMPTZ,
+      completed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS area_id TEXT;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS note TEXT;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS assigned_team_name TEXT;
+    CREATE INDEX IF NOT EXISTS citizen_profiles_user_id_idx ON citizen_profiles(user_id);
+    CREATE INDEX IF NOT EXISTS rescue_requests_created_by_user_id_idx ON rescue_requests(created_by_user_id);
+  `);
+}
+
+async function syncRelationalTablesFromState() {
+  if (!pool) return;
+
+  await ensureRelationalTables();
+  const client = await pool.connect();
+  try {
+    for (const user of Array.isArray(db.users) ? db.users : []) {
+      const passwordHash = user.password_hash || user.passwordHash;
+      if (!user.id || !user.full_name || !passwordHash) continue;
+
+      try {
+        await client.query(
+          `INSERT INTO users (id, full_name, phone, email, password_hash, role, status, avatar, created_at, updated_at)
+           VALUES ($1, $2, NULLIF($3, ''), NULLIF($4, ''), $5, $6::"UserRole", $7::"UserStatus", $8, COALESCE($9, NOW()), NOW())
+           ON CONFLICT (id) DO UPDATE SET
+             full_name = EXCLUDED.full_name,
+             phone = COALESCE(users.phone, EXCLUDED.phone),
+             email = COALESCE(users.email, EXCLUDED.email),
+             password_hash = EXCLUDED.password_hash,
+             role = EXCLUDED.role,
+             status = EXCLUDED.status,
+             avatar = EXCLUDED.avatar,
+             updated_at = NOW()`,
+          [
+            user.id,
+            user.full_name || user.fullName,
+            user.phone || '',
+            user.email || '',
+            passwordHash,
+            user.role || 'CITIZEN',
+            user.status || 'ACTIVE',
+            user.avatar || null,
+            toPgTimestamp(user.created_at || user.createdAt),
+          ]
+        );
+      } catch (err) {
+        console.warn(`Skipped relational user backfill for ${user.id}: ${err.message}`);
+      }
+    }
+
+    for (const profile of Array.isArray(db.citizenProfiles) ? db.citizenProfiles : []) {
+      if (!profile.id || !profile.user_id) continue;
+
+      try {
+        await client.query(
+          `INSERT INTO citizen_profiles (
+             id, user_id, area_id, area_name, village_name, address_detail, household_size,
+             elderly_count, children_count, disabled_count, medical_note, emergency_contact_name,
+             emergency_contact_phone, latitude, longitude, sms_opt_in, created_at, updated_at
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, NOW(), NOW())
+           ON CONFLICT (id) DO UPDATE SET
+             area_id = EXCLUDED.area_id,
+             area_name = EXCLUDED.area_name,
+             village_name = EXCLUDED.village_name,
+             address_detail = EXCLUDED.address_detail,
+             household_size = EXCLUDED.household_size,
+             elderly_count = EXCLUDED.elderly_count,
+             children_count = EXCLUDED.children_count,
+             disabled_count = EXCLUDED.disabled_count,
+             medical_note = EXCLUDED.medical_note,
+             emergency_contact_name = EXCLUDED.emergency_contact_name,
+             emergency_contact_phone = EXCLUDED.emergency_contact_phone,
+             latitude = EXCLUDED.latitude,
+             longitude = EXCLUDED.longitude,
+             sms_opt_in = EXCLUDED.sms_opt_in,
+             updated_at = NOW()`,
+          [
+            profile.id,
+            profile.user_id,
+            profile.area_id || null,
+            profile.area_name || null,
+            profile.village_name || '',
+            profile.address_detail || '',
+            Number.parseInt(profile.household_size, 10) || 1,
+            Number.parseInt(profile.elderly_count, 10) || 0,
+            Number.parseInt(profile.children_count, 10) || 0,
+            Number.parseInt(profile.disabled_count, 10) || 0,
+            profile.medical_note || '',
+            profile.emergency_contact_name || '',
+            profile.emergency_contact_phone || '',
+            Number.isFinite(Number(profile.latitude)) ? Number(profile.latitude) : null,
+            Number.isFinite(Number(profile.longitude)) ? Number(profile.longitude) : null,
+            profile.sms_opt_in !== false,
+          ]
+        );
+      } catch (err) {
+        console.warn(`Skipped relational citizen profile backfill for ${profile.id}: ${err.message}`);
+      }
+    }
+
+  } catch (err) {
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 async function initializePostgres() {
   if (!pool) return false;
+
+  await ensureRelationalTables();
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_state (
@@ -390,6 +817,43 @@ async function initializePostgres() {
 
   console.log('Database loaded from PostgreSQL');
   return true;
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function initializePostgresWithRetry() {
+  if (!pool) return false;
+
+  const attempts = Number.isFinite(DB_CONNECT_RETRIES) && DB_CONNECT_RETRIES > 0
+    ? Math.floor(DB_CONNECT_RETRIES)
+    : 1;
+  const delayMs = Number.isFinite(DB_CONNECT_RETRY_DELAY_MS) && DB_CONNECT_RETRY_DELAY_MS >= 0
+    ? DB_CONNECT_RETRY_DELAY_MS
+    : 3000;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await initializePostgres();
+    } catch (err) {
+      const isLastAttempt = attempt === attempts;
+      console.error(`PostgreSQL initialization failed (attempt ${attempt}/${attempts}):`, err.message);
+
+      if (isLastAttempt) {
+        if (IS_DEPLOYED_RUNTIME) {
+          throw err;
+        }
+
+        console.warn('Falling back to local JSON database because PostgreSQL is unavailable in development.');
+        return false;
+      }
+
+      await sleep(delayMs * attempt);
+    }
+  }
+
+  return false;
 }
 
 // Helper function to save DB to file
@@ -436,7 +900,7 @@ function saveDb() {
 applySeedPasswords();
 
 // Initialize database: load from db.json if it exists, otherwise seed it
-const usingPostgres = await initializePostgres();
+const usingPostgres = await initializePostgresWithRetry();
 
 if (!usingPostgres && fs.existsSync(DB_FILE)) {
   try {
@@ -473,6 +937,10 @@ if (!usingPostgres && fs.existsSync(DB_FILE)) {
 
 hardenLegacyPasswords();
 
+if (usingPostgres) {
+  await syncRelationalTablesFromState();
+}
+
 // ---------------------- API ROUTES ----------------------
 
 app.get('/api/health', (req, res) => {
@@ -486,11 +954,63 @@ app.get('/api/health', (req, res) => {
 });
 
 // 1. GET ALL DATABASE STATE (Sync on page load)
-app.get('/api/db', authenticateOptional, (req, res) => {
+app.get('/api/db', authenticateOptional, async (req, res) => {
   if (req.authError) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
-  res.json(sanitizeDbForUser(req.user));
+
+  try {
+    const data = pool
+      ? await sanitizeDbForUserFromPostgres(req.user)
+      : sanitizeDbForUser(req.user);
+    return res.json(data);
+  } catch (err) {
+    console.error('Database state route failed:', err);
+    return res.status(500).json({ error: 'Database state unavailable' });
+  }
+});
+
+app.get('/api/events', authenticateOptional, async (req, res) => {
+  if (req.authError) {
+    return res.status(401).end();
+  }
+
+  res.set({
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders?.();
+
+  const clientId = createId('sse');
+  sseClients.set(clientId, { res, user: req.user || null });
+
+  writeSse(res, 'connected', {
+    clientId,
+    timestamp: new Date().toISOString(),
+  });
+
+  try {
+    const data = await getRealtimeStateForUser(req.user || null);
+    writeSse(res, 'db:update', {
+      reason: 'initial',
+      changedCollections: [],
+      timestamp: new Date().toISOString(),
+      data,
+    });
+  } catch (err) {
+    console.error('Failed to send initial realtime state:', err);
+  }
+
+  const heartbeat = setInterval(() => {
+    writeSse(res, 'ping', { timestamp: new Date().toISOString() });
+  }, 25000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+    sseClients.delete(clientId);
+  });
 });
 
 // 2. AUTH LOGIN
@@ -509,20 +1029,34 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       });
     }
 
-    const users = Array.isArray(db.users) ? db.users : [];
-    if (users.length === 0) {
-      console.error('Login failed: users collection is empty or invalid');
-      return res.status(503).json({
-        success: false,
-        message: 'Du lieu nguoi dung chua san sang, vui long thu lai'
+    let user = null;
+    let profile = null;
+
+    if (pool) {
+      const userResult = await pool.query(
+        `SELECT id, full_name, phone, email, password_hash, role::text, status::text, avatar, created_at, updated_at
+         FROM users
+         WHERE lower(email) = $1 OR phone = $2
+         LIMIT 1`,
+        [credential, phoneCredential]
+      );
+      user = userRowToApi(userResult.rows[0]);
+    } else {
+      const users = Array.isArray(db.users) ? db.users : [];
+      if (users.length === 0) {
+        console.error('Login failed: users collection is empty or invalid');
+        return res.status(503).json({
+          success: false,
+          message: 'Du lieu nguoi dung chua san sang, vui long thu lai'
+        });
+      }
+
+      user = users.find(u => {
+        const email = normalize(u?.email).toLowerCase();
+        const phone = normalize(u?.phone).replace(/[\s.-]/g, '');
+        return email === credential || phone === phoneCredential;
       });
     }
-
-    const user = users.find(u => {
-      const email = normalize(u?.email).toLowerCase();
-      const phone = normalize(u?.phone).replace(/[\s.-]/g, '');
-      return email === credential || phone === phoneCredential;
-    });
 
     if (!user || user.status === 'BLOCKED' || !(await verifyPassword(user, plainPassword))) {
       return res.status(401).json({
@@ -531,8 +1065,15 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       });
     }
 
-    const profiles = Array.isArray(db.citizenProfiles) ? db.citizenProfiles : [];
-    const profile = profiles.find(p => p.user_id === user.id);
+    if (pool) {
+      await pool.query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [user.password_hash, user.id]);
+      const profileResult = await pool.query('SELECT * FROM citizen_profiles WHERE user_id = $1 LIMIT 1', [user.id]);
+      profile = citizenProfileRowToApi(profileResult.rows[0]);
+    } else {
+      const profiles = Array.isArray(db.citizenProfiles) ? db.citizenProfiles : [];
+      profile = profiles.find(p => p.user_id === user.id);
+    }
+
     const userForClient = safeUser(user);
     const token = issueToken(user);
 
@@ -585,6 +1126,97 @@ app.post('/api/auth/register', publicWriteLimiter, async (req, res) => {
       });
     }
 
+    const area = (Array.isArray(db.areas) ? db.areas : []).find(item => item.id === area_id);
+    const userId = createId('user');
+    const profileId = createId('cp');
+    const now = new Date().toISOString();
+    const areaName = area?.old_name || area?.current_name || normalize(area_name);
+    const passwordHash = await bcrypt.hash(cleanPassword, BCRYPT_ROUNDS);
+
+    if (pool) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const duplicatedResult = await client.query(
+          `SELECT phone, email
+           FROM users
+           WHERE phone = $1 OR ($2::text IS NOT NULL AND lower(email) = $2)
+           LIMIT 1`,
+          [cleanPhone, cleanEmail || null]
+        );
+        const duplicated = duplicatedResult.rows[0];
+        if (duplicated?.phone === cleanPhone) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            success: false,
+            message: `So dien thoai ${cleanPhone} da duoc dang ky`
+          });
+        }
+        if (duplicated?.email && cleanEmail && normalize(duplicated.email).toLowerCase() === cleanEmail) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            success: false,
+            message: `Email ${cleanEmail} da duoc dang ky`
+          });
+        }
+
+        const userResult = await client.query(
+          `INSERT INTO users (id, full_name, phone, email, password_hash, role, status, avatar, created_at, updated_at)
+           VALUES ($1, $2, $3, NULLIF($4, ''), $5, 'CITIZEN', 'ACTIVE', NULL, NOW(), NOW())
+           RETURNING id, full_name, phone, email, password_hash, role::text, status::text, avatar, created_at, updated_at`,
+          [userId, cleanName, cleanPhone, cleanEmail, passwordHash]
+        );
+
+        const profileResult = await client.query(
+          `INSERT INTO citizen_profiles (
+             id, user_id, area_id, area_name, village_name, address_detail, household_size,
+             elderly_count, children_count, disabled_count, medical_note, emergency_contact_name,
+             emergency_contact_phone, latitude, longitude, sms_opt_in, created_at, updated_at
+           )
+           VALUES ($1, $2, $3, $4, '', $5, $6, $7, $8, $9, '', $10, $11, NULL, NULL, TRUE, NOW(), NOW())
+           RETURNING *`,
+          [
+            profileId,
+            userId,
+            area_id,
+            areaName,
+            normalize(address_detail),
+            Number.parseInt(household_size, 10) || 1,
+            has_elderly ? 1 : 0,
+            has_children ? 1 : 0,
+            has_disabled ? 1 : 0,
+            normalize(emergency_contact_name),
+            normalize(emergency_contact_phone),
+          ]
+        );
+
+        await client.query('COMMIT');
+
+        const user = userRowToApi(userResult.rows[0]);
+        const profile = citizenProfileRowToApi(profileResult.rows[0]);
+        db.users.push(user);
+        if (!Array.isArray(db.citizenProfiles)) db.citizenProfiles = [];
+        db.citizenProfiles.push(profile);
+
+        return res.status(201).json({
+          success: true,
+          user: safeUser(user),
+          profile
+        });
+      } catch (err) {
+        await client.query('ROLLBACK');
+        if (err.code === '23505') {
+          return res.status(409).json({
+            success: false,
+            message: 'So dien thoai hoac email da duoc dang ky'
+          });
+        }
+        throw err;
+      } finally {
+        client.release();
+      }
+    }
+
     const users = Array.isArray(db.users) ? db.users : [];
     const duplicatedPhoneUser = users.find(user => normalizePhone(user?.phone) === cleanPhone);
     const duplicatedEmailUser = cleanEmail
@@ -605,16 +1237,12 @@ app.post('/api/auth/register', publicWriteLimiter, async (req, res) => {
       });
     }
 
-    const area = (Array.isArray(db.areas) ? db.areas : []).find(item => item.id === area_id);
-    const userId = `user-${Date.now()}`;
-    const profileId = `cp-${Date.now()}`;
-    const now = new Date().toISOString();
     const user = {
       id: userId,
       full_name: cleanName,
       phone: cleanPhone,
       email: cleanEmail || null,
-      password_hash: await bcrypt.hash(cleanPassword, 12),
+      password_hash: passwordHash,
       role: 'CITIZEN',
       status: 'ACTIVE',
       created_at: now,
@@ -624,7 +1252,7 @@ app.post('/api/auth/register', publicWriteLimiter, async (req, res) => {
       id: profileId,
       user_id: userId,
       area_id,
-      area_name: area?.old_name || area?.current_name || normalize(area_name),
+      area_name: areaName,
       village_name: '',
       address_detail: normalize(address_detail),
       household_size: Number.parseInt(household_size, 10) || 1,
@@ -694,7 +1322,7 @@ app.post('/api/warnings', requireRoles(ADMIN_ROLES), (req, res) => {
   const data = pickAllowed(req.body, WARNING_FIELDS);
   const textToEmbed = `${data.title || ''} ${data.content || ''} ${data.area_name || ''}`;
   const warning = {
-    id: `fw-${Date.now()}`,
+    id: createId('fw'),
     ...data,
     vector_embedding: getEmbedding(textToEmbed),
     created_at: new Date().toISOString(),
@@ -704,6 +1332,7 @@ app.post('/api/warnings', requireRoles(ADMIN_ROLES), (req, res) => {
   };
   db.floodWarnings.unshift(warning);
   saveDb();
+  broadcastDbUpdate('warning:created', ['floodWarnings']);
   res.status(201).json(warning);
 });
 
@@ -718,6 +1347,7 @@ app.put('/api/warnings/:id', requireRoles(ADMIN_ROLES), (req, res) => {
 
   db.floodWarnings[idx] = updatedData;
   saveDb();
+  broadcastDbUpdate('warning:updated', ['floodWarnings']);
   res.json(updatedData);
 });
 
@@ -725,30 +1355,78 @@ app.delete('/api/warnings/:id', requireRoles(ADMIN_ROLES), (req, res) => {
   const { id } = req.params;
   db.floodWarnings = db.floodWarnings.filter(w => w.id !== id);
   saveDb();
+  broadcastDbUpdate('warning:deleted', ['floodWarnings']);
   res.json({ success: true });
 });
 
 // 5. RESCUE REQUESTS & MISSIONS
-app.post('/api/rescue-requests', publicWriteLimiter, authenticateOptional, (req, res) => {
-  const data = pickAllowed(req.body, RESCUE_REQUEST_PUBLIC_FIELDS);
-  if (req.user) {
-    data.user_id = req.user.id;
+app.post('/api/rescue-requests', publicWriteLimiter, authenticateOptional, async (req, res) => {
+  try {
+    const data = pickAllowed(req.body, RESCUE_REQUEST_PUBLIC_FIELDS);
+    if (req.user) {
+      data.user_id = req.user.id;
+    }
+
+    if (!data.full_name || !data.area_id || !data.address_detail) {
+      return res.status(400).json({ error: 'Missing required rescue request fields' });
+    }
+
+    const requestId = createId('rr');
+    const textToEmbed = `${data.full_name || ''} ${data.address_detail || ''} ${data.note || ''}`;
+
+    if (pool) {
+      const result = await pool.query(
+        `INSERT INTO rescue_requests (
+           id, full_name, phone, area_id, area_name, address_detail, description, note,
+           number_of_people, emergency_level, latitude, longitude, status, assigned_team_id,
+           assigned_team_name, created_by_user_id, accepted_at, completed_at, created_at, updated_at
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::"AlertLevel", $11, $12, 'PENDING', NULL, NULL, $13, NULL, NULL, NOW(), NOW())
+         RETURNING *, status::text, emergency_level::text`,
+        [
+          requestId,
+          data.full_name,
+          data.phone || null,
+          data.area_id || null,
+          data.area_name || null,
+          data.address_detail || null,
+          data.description || null,
+          data.note || null,
+          Number.parseInt(data.number_of_people, 10) || 1,
+          ['LOW', 'MEDIUM', 'HIGH', 'EMERGENCY'].includes(data.emergency_level) ? data.emergency_level : 'HIGH',
+          Number.isFinite(Number(data.latitude)) ? Number(data.latitude) : null,
+          Number.isFinite(Number(data.longitude)) ? Number(data.longitude) : null,
+          data.user_id || null,
+        ]
+      );
+      const request = {
+        ...rescueRequestRowToApi(result.rows[0]),
+        vector_embedding: getEmbedding(textToEmbed),
+      };
+      db.rescueRequests.unshift(request);
+      broadcastDbUpdate('rescue-request:created', ['rescueRequests']);
+      return res.status(201).json(request);
+    }
+
+    const request = {
+      id: requestId,
+      ...data,
+      vector_embedding: getEmbedding(textToEmbed),
+      status: 'PENDING',
+      assigned_team_id: null,
+      assigned_team_name: null,
+      created_at: new Date().toISOString(),
+      accepted_at: null,
+      completed_at: null
+    };
+    db.rescueRequests.unshift(request);
+    saveDb();
+    broadcastDbUpdate('rescue-request:created', ['rescueRequests']);
+    return res.status(201).json(request);
+  } catch (err) {
+    console.error('Rescue request route failed:', err);
+    return res.status(500).json({ error: 'Failed to create rescue request' });
   }
-  const textToEmbed = `${data.full_name || ''} ${data.address_detail || ''} ${data.note || ''}`;
-  const request = {
-    id: `rr-${Date.now()}`,
-    ...data,
-    vector_embedding: getEmbedding(textToEmbed),
-    status: 'PENDING',
-    assigned_team_id: null,
-    assigned_team_name: null,
-    created_at: new Date().toISOString(),
-    accepted_at: null,
-    completed_at: null
-  };
-  db.rescueRequests.unshift(request);
-  saveDb();
-  res.status(201).json(request);
 });
 
 app.put('/api/rescue-requests/:id', requireRoles([...ADMIN_ROLES, ...RESCUE_ROLES]), (req, res) => {
@@ -758,6 +1436,7 @@ app.put('/api/rescue-requests/:id', requireRoles([...ADMIN_ROLES, ...RESCUE_ROLE
 
   db.rescueRequests[idx] = { ...db.rescueRequests[idx], ...pickAllowed(req.body, RESCUE_REQUEST_UPDATE_FIELDS) };
   saveDb();
+  broadcastDbUpdate('rescue-request:updated', ['rescueRequests']);
   res.json(db.rescueRequests[idx]);
 });
 
@@ -777,7 +1456,7 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), (req, res
 
   // Create corresponding mission
   const mission = {
-    id: `rm-${Date.now()}`,
+    id: createId('rm'),
     rescue_request_id: id,
     rescue_team_id: teamId,
     team_name: teamName,
@@ -814,7 +1493,7 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), (req, res
 
   // Add activity log
   const log = {
-    id: `al-${Date.now()}`,
+    id: createId('al'),
     user_id: currentUser?.id || null,
     user_name: currentUser?.full_name || 'Hệ thống',
     action: 'Phân công đội cứu hộ',
@@ -827,7 +1506,7 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), (req, res
 
   // Add notification for team
   const notif = {
-    id: `notif-${Date.now()}`,
+    id: createId('notif'),
     user_id: 'user-rescue-1', // Default lead
     title: 'Nhiệm vụ mới!',
     message: `Bạn được phân công cứu hộ ${request.full_name}`,
@@ -839,6 +1518,7 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), (req, res
   db.notifications.unshift(notif);
 
   saveDb();
+  broadcastDbUpdate('rescue-request:assigned', ['rescueRequests', 'rescueMissions', 'activityLogs', 'notifications']);
   res.json({ success: true, request, mission });
 });
 
@@ -859,7 +1539,7 @@ app.post('/api/missions/:id/status', requireRoles([...ADMIN_ROLES, ...RESCUE_ROL
 
   // Log status change
   const logEntry = {
-    id: `msl-${Date.now()}`,
+    id: createId('msl'),
     mission_id: id,
     old_status: oldStatus,
     new_status: newStatus,
@@ -880,13 +1560,14 @@ app.post('/api/missions/:id/status', requireRoles([...ADMIN_ROLES, ...RESCUE_ROL
   }
 
   saveDb();
+  broadcastDbUpdate('mission:status-updated', ['rescueMissions', 'rescueRequests', 'missionStatusLogs']);
   res.json({ success: true, mission: db.rescueMissions[missionIdx] });
 });
 
 // 7. RESCUE TEAMS CRUD
 app.post('/api/teams', requireRoles(ADMIN_ROLES), (req, res) => {
   const team = {
-    id: `team-${Date.now()}`,
+    id: createId('team'),
     ...pickAllowed(req.body, TEAM_FIELDS),
     created_at: new Date().toISOString()
   };
@@ -917,7 +1598,7 @@ app.post('/api/safe-zones', requireRoles(ADMIN_ROLES), (req, res) => {
   const data = pickAllowed(req.body, SAFE_ZONE_FIELDS);
   const textToEmbed = `${data.name || ''} ${data.address || ''} ${data.notes || ''}`;
   const sz = {
-    id: `sz-${Date.now()}`,
+    id: createId('sz'),
     ...data,
     vector_embedding: getEmbedding(textToEmbed),
     created_at: new Date().toISOString()
@@ -951,7 +1632,7 @@ app.delete('/api/safe-zones/:id', requireRoles(ADMIN_ROLES), (req, res) => {
 // 9. RESCUE ROUTES CRUD
 app.post('/api/routes', requireRoles(ADMIN_ROLES), (req, res) => {
   const route = {
-    id: `route-${Date.now()}`,
+    id: createId('route'),
     ...pickAllowed(req.body, ROUTE_FIELDS),
     created_at: new Date().toISOString()
   };
@@ -980,7 +1661,7 @@ app.delete('/api/routes/:id', requireRoles(ADMIN_ROLES), (req, res) => {
 // 10. ACTIVITY LOGS, DAMAGE REPORTS, SMS LOGS & VULNERABLE HOUSEHOLDS
 app.post('/api/damage-reports', requireRoles(ADMIN_ROLES), (req, res) => {
   const dr = {
-    id: `dr-${Date.now()}`,
+    id: createId('dr'),
     ...pickAllowed(req.body, DAMAGE_REPORT_FIELDS),
     status: 'PENDING',
     created_at: new Date().toISOString()
@@ -992,7 +1673,7 @@ app.post('/api/damage-reports', requireRoles(ADMIN_ROLES), (req, res) => {
 
 app.post('/api/vulnerable-households', requireRoles(ADMIN_ROLES), (req, res) => {
   const vh = {
-    id: `vh-${Date.now()}`,
+    id: createId('vh'),
     ...pickAllowed(req.body, VULNERABLE_HOUSEHOLD_FIELDS),
     created_at: new Date().toISOString()
   };
@@ -1013,12 +1694,13 @@ app.put('/api/vulnerable-households/:id', requireRoles(ADMIN_ROLES), (req, res) 
 
 app.post('/api/sms-logs', requireRoles(ADMIN_ROLES), (req, res) => {
   const log = {
-    id: `sms-${Date.now()}`,
+    id: createId('sms'),
     ...pickAllowed(req.body, SMS_LOG_FIELDS),
     sent_at: new Date().toISOString()
   };
   db.smsLogs.unshift(log);
   saveDb();
+  broadcastDbUpdate('sms-log:created', ['smsLogs']);
   res.status(201).json(log);
 });
 
@@ -1032,6 +1714,7 @@ app.put('/api/notifications/:id/read', requireAuth, (req, res) => {
     }
     db.notifications[idx].is_read = true;
     saveDb();
+    broadcastDbUpdate('notification:read', ['notifications']);
   }
   res.json({ success: true });
 });

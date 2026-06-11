@@ -1,10 +1,10 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Anchor, AlertTriangle, Ship, Compass, Waves, Plus, Bell, Clock, MapPin } from 'lucide-react';
 import { StatusBadge, LevelBadge } from '../../components/common/StatusBadge';
-import { AREAS } from '../../data/mockData';
+import { AREAS } from '../../data/publicData';
 
 export default function CoastalWarnings() {
   const { floodWarnings, createWarning } = useData();

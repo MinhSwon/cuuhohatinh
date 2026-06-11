@@ -1,10 +1,10 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, MapPin, Send } from 'lucide-react';
-import { AREAS } from '../../data/mockData';
+import { AREAS } from '../../data/publicData';
 
 export default function RescueRequest() {
   const { currentUser } = useAuth();

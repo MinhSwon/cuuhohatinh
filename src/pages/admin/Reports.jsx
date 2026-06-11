@@ -1,10 +1,10 @@
-﻿import { useData } from '../../contexts/DataContext';
+import { useData } from '../../contexts/DataContext';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   PieChart, Pie, Cell, LineChart, Line, Legend
 } from 'recharts';
 import { BarChart3, Download, TrendingUp } from 'lucide-react';
-import { AREAS } from '../../data/mockData';
+import { AREAS } from '../../data/publicData';
 
 export default function Reports() {
   const { rescueRequests, rescueMissions, rescueTeams, floodWarnings, smsLogs, vulnerableHouseholds } = useData();

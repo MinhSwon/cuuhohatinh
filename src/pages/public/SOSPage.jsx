@@ -1,8 +1,8 @@
-﻿import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
-import { AlertTriangle, Phone, MapPin, Loader, CheckCircle, Navigation, X, ChevronDown } from 'lucide-react';
-import { AREAS } from '../../data/mockData';
+import { AlertTriangle, Phone, MapPin, Loader, CheckCircle, X, ChevronDown } from 'lucide-react';
+import { AREAS } from '../../data/publicData';
 
 const EMERGENCY_TYPES = [
   { emoji: '🏠', label: 'Nhà bị ngập', desc: 'Nước dâng vào nhà' },
@@ -29,6 +29,7 @@ export default function SOSPage() {
   const [peopleCount, setPeopleCount] = useState(1);
   const [result, setResult] = useState(null);
   const [countdown, setCountdown] = useState(null);
+  const [sendError, setSendError] = useState('');
   const timerRef = useRef(null);
 
   // Auto-grab GPS when entering LOCATION step
@@ -36,10 +37,15 @@ export default function SOSPage() {
     if (step === 'LOCATION') {
       grabGPS();
     }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [step]);
 
-  const grabGPS = () => {
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
+  function grabGPS() {
     setGpsLoading(true);
     setGpsError(false);
     if (navigator.geolocation) {
@@ -61,6 +67,8 @@ export default function SOSPage() {
   };
 
   const handleSend = () => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    setSendError('');
     setStep('SENDING');
     let count = 3;
     setCountdown(count);
@@ -75,33 +83,43 @@ export default function SOSPage() {
   };
 
   const cancelCountdown = () => {
-    clearInterval(timerRef.current);
+    if (timerRef.current) clearInterval(timerRef.current);
+    timerRef.current = null;
     setStep('LOCATION');
     setCountdown(null);
   };
 
-  const submitRequest = () => {
+  const submitRequest = async () => {
     const area = AREAS.find(a => a.id === areaId);
-    const req = createRescueRequest({
-      full_name: 'Người dùng SOS',
-      phone,
-      area_id: areaId || '',
-      area_name: area?.old_name || 'Chưa xác định',
-      address_detail: addressNote || `GPS: ${gps?.lat?.toFixed(5)}, ${gps?.lon?.toFixed(5)}`,
-      description: `🆘 YÊU CẦU CỨU HỘ KHẨN CẤP qua nút SOS. Loại: ${selectedType?.label}. ${addressNote ? 'Ghi chú: ' + addressNote : ''}`,
-      number_of_people: peopleCount,
-      emergency_level: 'EMERGENCY',
-      latitude: gps?.lat || null,
-      longitude: gps?.lon || null,
-      has_elderly: selectedType?.emoji === '👴',
-      has_children: selectedType?.emoji === '👨‍👩‍👧',
-      has_disabled: false,
-      has_medical_case: selectedType?.emoji === '👴',
-      sos_mode: true,
-    });
-    addNotification(null, '🆘 SOS KHẨN CẤP!', `${phone} cần cứu hộ — ${selectedType?.label}${gps ? ` (GPS: ${gps.lat.toFixed(4)}, ${gps.lon.toFixed(4)})` : ''}`, 'RESCUE_REQUEST', req.id);
-    setResult(req);
-    setStep('DONE');
+    try {
+      const req = await createRescueRequest({
+        full_name: 'Người dùng SOS',
+        phone,
+        area_id: areaId || '',
+        area_name: area?.old_name || 'Chưa xác định',
+        address_detail: addressNote || `GPS: ${gps?.lat?.toFixed(5)}, ${gps?.lon?.toFixed(5)}`,
+        description: `🆘 YÊU CẦU CỨU HỘ KHẨN CẤP qua nút SOS. Loại: ${selectedType?.label}. ${addressNote ? 'Ghi chú: ' + addressNote : ''}`,
+        number_of_people: peopleCount,
+        emergency_level: 'EMERGENCY',
+        latitude: gps?.lat || null,
+        longitude: gps?.lon || null,
+        has_elderly: selectedType?.emoji === '👴',
+        has_children: selectedType?.emoji === '👨‍👩‍👧',
+        has_disabled: false,
+        has_medical_case: selectedType?.emoji === '👴',
+        sos_mode: true,
+      });
+      addNotification(null, '🆘 SOS KHẨN CẤP!', `${phone} cần cứu hộ — ${selectedType?.label}${gps ? ` (GPS: ${gps.lat.toFixed(4)}, ${gps.lon.toFixed(4)})` : ''}`, 'RESCUE_REQUEST', req.id);
+      setResult(req);
+      setStep('DONE');
+    } catch (err) {
+      console.error('Failed to submit SOS request:', err);
+      setSendError('Không gửi được yêu cầu. Vui lòng thử lại hoặc gọi trực tiếp 114/115.');
+      setStep('LOCATION');
+    } finally {
+      timerRef.current = null;
+      setCountdown(null);
+    }
   };
 
   return (
@@ -247,6 +265,7 @@ export default function SOSPage() {
               </div>
             </div>
 
+            {sendError && <p style={{ color: '#fca5a5', fontSize: '0.75rem', marginBottom: '1rem', fontWeight: 700 }}>{sendError}</p>}
             <button
               onClick={() => phone.length >= 9 ? setStep('LOCATION') : null}
               disabled={phone.length < 9}
@@ -360,6 +379,7 @@ export default function SOSPage() {
               <AlertTriangle size={22} />
               🆘 GỬI CỨU HỘ NGAY
             </button>
+            {sendError && <p style={{ color: '#fca5a5', fontSize: '0.75rem', marginTop: '0.75rem', fontWeight: 700 }}>{sendError}</p>}
             <p style={{ color: '#475569', fontSize: '0.68rem', marginTop: '0.75rem' }}>
               Nhấn nút sẽ đếm ngược 3 giây. Bạn có thể hủy trước khi gửi.
             </p>
@@ -468,7 +488,7 @@ export default function SOSPage() {
       {/* Step indicator (bottom) */}
       {step !== 'DONE' && step !== 'SENDING' && (
         <div style={{ padding: '1.25rem', display: 'flex', justifyContent: 'center', gap: '0.375rem', position: 'relative', zIndex: 10 }}>
-          {['TYPE', 'PHONE', 'LOCATION'].map((s, i) => (
+          {['TYPE', 'PHONE', 'LOCATION'].map((s) => (
             <div key={s} style={{ width: step === s ? 24 : 8, height: 8, borderRadius: 4, background: step === s ? '#ef4444' : 'rgba(255,255,255,0.15)', transition: 'all 0.3s' }} />
           ))}
         </div>

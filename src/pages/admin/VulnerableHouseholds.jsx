@@ -1,7 +1,7 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { Search } from 'lucide-react';
-import { AREAS } from '../../data/mockData';
+import { AREAS } from '../../data/publicData';
 
 export default function VulnerableHouseholds() {
   const { vulnerableHouseholds, citizenProfiles, users } = useData();

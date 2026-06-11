@@ -15,6 +15,8 @@
     "db:seed": "node scripts/seed-prisma.js",
     "db:setup": "npm run db:create && npm run db:deploy && npm run db:generate && npm run db:seed",
     "db:reset-local": "node scripts/reset-prisma-database.js && npm run db:deploy && npm run db:generate && npm run db:seed",
+    "loadtest:register": "node scripts/loadtest-register.mjs",
+    "loadtest:actions": "node scripts/loadtest-user-actions.mjs",
     "lint": "eslint .",
     "preview": "vite preview"
   },

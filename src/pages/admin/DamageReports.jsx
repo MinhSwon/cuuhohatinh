@@ -1,9 +1,9 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Plus, X, Home, Users, Wheat, Landmark, ShieldAlert } from 'lucide-react';
-import { AREAS } from '../../data/mockData';
+import { AREAS } from '../../data/publicData';
 
 const DAMAGE_TYPES = ['Nhà cửa', 'Tài sản', 'Đường sá', 'Cầu cống', 'Nông nghiệp', 'Người bị thương', 'Thủy lợi/Hồ chứa'];
 const SEVERITY_LABELS = { LOW: 'Nhẹ', MEDIUM: 'Trung bình', HIGH: 'Nặng', EMERGENCY: 'Nghiêm trọng' };

@@ -4,7 +4,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Eye, UserCheck, X, Filter, ChevronDown, AlertTriangle, Phone, MapPin, Users } from 'lucide-react';
 import { StatusBadge, LevelBadge } from '../../components/common/StatusBadge';
-import { AREAS } from '../../data/mockData';
+import { AREAS } from '../../data/publicData';
 
 const URGENCY_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'EMERGENCY'];
 const STATUS_FILTER_OPTIONS = ['PENDING', 'ASSIGNED', 'ACCEPTED', 'MOVING', 'NEAR_VICTIM', 'ARRIVED_CONFIRMED', 'RESCUING', 'RESCUED', 'UNREACHABLE', 'NEED_SUPPORT', 'CANCELLED'];

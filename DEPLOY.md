@@ -48,6 +48,8 @@ JWT_EXPIRES_IN=8h
 SEED_ADMIN_PASSWORD=doi-mat-khau-admin-moi
 SEED_RESCUE_PASSWORD=doi-mat-khau-cuu-ho-moi
 SEED_CITIZEN_PASSWORD=doi-mat-khau-nguoi-dan-moi
+DB_CONNECT_RETRIES=8
+DB_CONNECT_RETRY_DELAY_MS=3000
 ```
 
 Ghi chu:
@@ -57,6 +59,7 @@ Ghi chu:
 - Khi co `DATABASE_URL`, Prisma se ket noi PostgreSQL va quan ly cac bang quan he.
 - Tren Render nen luon cau hinh `DATABASE_URL`; `db.json` chi phu hop de chay local va khong duoc commit len Git.
 - `PGSSL=true` thuong can cho database tren hosting. Neu PostgreSQL chay local bang pgAdmin thi de `PGSSL=false`.
+- Neu Render bao `getaddrinfo ENOTFOUND dpg-...` luc khoi dong, thu tang `DB_CONNECT_RETRIES` hoac `DB_CONNECT_RETRY_DELAY_MS` de backend doi PostgreSQL san sang truoc khi thoat.
 - `JWT_SECRET` bat buoc tren Render/production. Co the tao bang `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`.
 - Cac mat khau seed phai la mat khau moi, khong dung lai mat khau demo da tung co trong lich su Git.
 

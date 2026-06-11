@@ -1,8 +1,8 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Search, Filter, X } from 'lucide-react';
-import { AREAS } from '../../data/mockData';
+import { AREAS } from '../../data/publicData';
 
 export default function Subscribers() {
   const { citizenProfiles, users } = useData();

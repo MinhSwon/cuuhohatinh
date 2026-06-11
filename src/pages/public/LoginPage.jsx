@@ -30,12 +30,6 @@ export default function LoginPage() {
     }, 500);
   };
 
-  const DEMO_ACCOUNTS = [
-    { label: 'Admin / Điều phối viên', email: 'admin@floodguard.vn', color: '#4a6fa5' },
-    { label: 'Đội cứu hộ', email: 'doicuuho1@floodguard.vn', color: '#3a6b4a' },
-    { label: 'Người dân', email: 'nguoidan1@gmail.com', color: '#6b5a45' },
-  ];
-
   return (
     <div style={{
       minHeight: '100vh',
@@ -148,35 +142,6 @@ export default function LoginPage() {
               {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
             </button>
           </form>
-
-          {/* Demo accounts */}
-          <div style={{ marginTop: '1.75rem', paddingTop: '1.25rem', borderTop: '1px solid #e2dbd0' }}>
-            <p style={{ fontSize: '0.65rem', color: '#b8afa5', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.75rem' }}>
-              Tài khoản thử nghiệm
-            </p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {DEMO_ACCOUNTS.map(acc => (
-                <button
-                  key={acc.email}
-                  type="button"
-                  onClick={() => setForm(f => ({ ...f, emailOrPhone: acc.email }))}
-                  style={{
-                    padding: '0.5rem 0.75rem',
-                    borderRadius: 7,
-                    border: '1px solid #e2dbd0',
-                    background: '#fdfcf8',
-                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    cursor: 'pointer', transition: 'all 0.15s', textAlign: 'left',
-                  }}
-                  onMouseEnter={e => e.currentTarget.style.background = '#f5f1eb'}
-                  onMouseLeave={e => e.currentTarget.style.background = '#fdfcf8'}
-                >
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: acc.color }}>{acc.label}</span>
-                  <span style={{ fontSize: '0.65rem', color: '#b8afa5', fontFamily: 'monospace' }}>{acc.email}</span>
-                </button>
-              ))}
-            </div>
-          </div>
 
           <div style={{ marginTop: '1.25rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Link to="/" style={{ fontSize: '0.75rem', color: '#9e9282', textDecoration: 'none' }}>← Trang chủ</Link>

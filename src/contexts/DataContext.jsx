@@ -1,62 +1,107 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import axios from 'axios';
-import {
-  AREAS, USERS, CITIZEN_PROFILES, VULNERABLE_HOUSEHOLDS,
-  FLOOD_WARNINGS, RESCUE_REQUESTS, RESCUE_MISSIONS, MISSION_STATUS_LOGS,
-  RESCUE_TEAMS, SAFE_ZONES, RESCUE_ROUTES, DAMS, SMS_LOGS,
-  DAMAGE_REPORTS, ACTIVITY_LOGS, NOTIFICATIONS
-} from '../data/mockData';
+import { AREAS } from '../data/publicData';
 
 const DataContext = createContext(null);
 const shouldUseOfflineFallback = (err) => !err.response;
 
+function getEventStreamUrl(token) {
+  const apiBaseUrl = axios.defaults.baseURL || '';
+  const url = new URL('/api/events', apiBaseUrl || window.location.origin);
+  if (token) url.searchParams.set('token', token);
+  return url.toString();
+}
+
 export function DataProvider({ children }) {
   const [areas, setAreas] = useState(AREAS);
-  const [users, setUsers] = useState(USERS);
-  const [citizenProfiles, setCitizenProfiles] = useState(CITIZEN_PROFILES);
-  const [vulnerableHouseholds, setVulnerableHouseholds] = useState(VULNERABLE_HOUSEHOLDS);
-  const [floodWarnings, setFloodWarnings] = useState(FLOOD_WARNINGS);
-  const [rescueRequests, setRescueRequests] = useState(RESCUE_REQUESTS);
-  const [rescueMissions, setRescueMissions] = useState(RESCUE_MISSIONS);
-  const [missionStatusLogs, setMissionStatusLogs] = useState(MISSION_STATUS_LOGS);
-  const [rescueTeams, setRescueTeams] = useState(RESCUE_TEAMS);
-  const [safeZones, setSafeZones] = useState(SAFE_ZONES);
-  const [rescueRoutes, setRescueRoutes] = useState(RESCUE_ROUTES);
-  const [dams, setDams] = useState(DAMS);
-  const [smsLogs, setSmsLogs] = useState(SMS_LOGS);
-  const [damageReports, setDamageReports] = useState(DAMAGE_REPORTS);
-  const [activityLogs, setActivityLogs] = useState(ACTIVITY_LOGS);
-  const [notifications, setNotifications] = useState(NOTIFICATIONS);
+  const [users, setUsers] = useState([]);
+  const [citizenProfiles, setCitizenProfiles] = useState([]);
+  const [vulnerableHouseholds, setVulnerableHouseholds] = useState([]);
+  const [floodWarnings, setFloodWarnings] = useState([]);
+  const [rescueRequests, setRescueRequests] = useState([]);
+  const [rescueMissions, setRescueMissions] = useState([]);
+  const [missionStatusLogs, setMissionStatusLogs] = useState([]);
+  const [rescueTeams, setRescueTeams] = useState([]);
+  const [safeZones, setSafeZones] = useState([]);
+  const [rescueRoutes, setRescueRoutes] = useState([]);
+  const [dams, setDams] = useState([]);
+  const [smsLogs, setSmsLogs] = useState([]);
+  const [damageReports, setDamageReports] = useState([]);
+  const [activityLogs, setActivityLogs] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [dbSynced, setDbSynced] = useState(false);
+  const [eventStreamToken, setEventStreamToken] = useState(() => localStorage.getItem('authToken') || '');
+
+  const applyBackendState = useCallback((data) => {
+    if (data.areas) setAreas(data.areas);
+    if (data.users) setUsers(data.users);
+    if (data.citizenProfiles) setCitizenProfiles(data.citizenProfiles);
+    if (data.vulnerableHouseholds) setVulnerableHouseholds(data.vulnerableHouseholds);
+    if (data.floodWarnings) setFloodWarnings(data.floodWarnings);
+    if (data.rescueRequests) setRescueRequests(data.rescueRequests);
+    if (data.rescueMissions) setRescueMissions(data.rescueMissions);
+    if (data.missionStatusLogs) setMissionStatusLogs(data.missionStatusLogs);
+    if (data.rescueTeams) setRescueTeams(data.rescueTeams);
+    if (data.safeZones) setSafeZones(data.safeZones);
+    if (data.rescueRoutes) setRescueRoutes(data.rescueRoutes);
+    if (data.dams) setDams(data.dams);
+    if (data.smsLogs) setSmsLogs(data.smsLogs);
+    if (data.damageReports) setDamageReports(data.damageReports);
+    if (data.activityLogs) setActivityLogs(data.activityLogs);
+    if (data.notifications) setNotifications(data.notifications);
+    setDbSynced(true);
+  }, []);
 
   // Sync state with Express backend database on mount
   useEffect(() => {
     async function syncWithBackend() {
       try {
         const res = await axios.get('/api/db');
-        const data = res.data;
-        if (data.areas) setAreas(data.areas);
-        if (data.users) setUsers(data.users);
-        if (data.citizenProfiles) setCitizenProfiles(data.citizenProfiles);
-        if (data.vulnerableHouseholds) setVulnerableHouseholds(data.vulnerableHouseholds);
-        if (data.floodWarnings) setFloodWarnings(data.floodWarnings);
-        if (data.rescueRequests) setRescueRequests(data.rescueRequests);
-        if (data.rescueMissions) setRescueMissions(data.rescueMissions);
-        if (data.missionStatusLogs) setMissionStatusLogs(data.missionStatusLogs);
-        if (data.rescueTeams) setRescueTeams(data.rescueTeams);
-        if (data.safeZones) setSafeZones(data.safeZones);
-        if (data.rescueRoutes) setRescueRoutes(data.rescueRoutes);
-        if (data.dams) setDams(data.dams);
-        if (data.smsLogs) setSmsLogs(data.smsLogs);
-        if (data.damageReports) setDamageReports(data.damageReports);
-        if (data.activityLogs) setActivityLogs(data.activityLogs);
-        if (data.notifications) setNotifications(data.notifications);
-        setDbSynced(true);
+        applyBackendState(res.data);
       } catch (err) {
         console.warn('Backend server offline. Running in offline mockup mode with local state.', err);
       }
     }
     syncWithBackend();
+  }, [applyBackendState]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof EventSource === 'undefined') return undefined;
+
+    const events = new EventSource(getEventStreamUrl(eventStreamToken));
+
+    const handleDbUpdate = (event) => {
+      try {
+        const payload = JSON.parse(event.data);
+        if (payload.data) applyBackendState(payload.data);
+      } catch (err) {
+        console.warn('Realtime update payload is invalid.', err);
+      }
+    };
+
+    events.addEventListener('db:update', handleDbUpdate);
+    events.onerror = () => {
+      console.warn('Realtime stream disconnected. Browser will retry automatically.');
+    };
+
+    return () => {
+      events.removeEventListener('db:update', handleDbUpdate);
+      events.close();
+    };
+  }, [applyBackendState, eventStreamToken]);
+
+  useEffect(() => {
+    const syncToken = () => {
+      setEventStreamToken(localStorage.getItem('authToken') || '');
+    };
+
+    window.addEventListener('storage', syncToken);
+    const tokenPoll = window.setInterval(syncToken, 1000);
+
+    return () => {
+      window.removeEventListener('storage', syncToken);
+      window.clearInterval(tokenPoll);
+    };
   }, []);
 
   const addLog = useCallback((userId, userName, action, tableName, recordId, note) => {

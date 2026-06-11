@@ -1,10 +1,10 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Phone, Lock, User, MapPin } from 'lucide-react';
-import { AREAS } from '../../data/mockData';
+import { AREAS } from '../../data/publicData';
 
 export default function RegisterPage() {
   const [form, setForm] = useState({
@@ -85,7 +85,7 @@ export default function RegisterPage() {
               </div>
               <div>
                 <label className="form-label">Số điện thoại *</label>
-                <input className="form-input" placeholder="0912345678" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} required />
+                <input className="form-input" placeholder="Số điện thoại" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} required />
               </div>
             </div>
 
@@ -154,7 +154,7 @@ export default function RegisterPage() {
               </div>
               <div>
                 <label className="form-label">SĐT liên hệ khẩn cấp</label>
-                <input className="form-input" placeholder="0912345678" value={form.emergency_contact_phone} onChange={e => setForm(f => ({ ...f, emergency_contact_phone: e.target.value }))} />
+                <input className="form-input" placeholder="Số điện thoại" value={form.emergency_contact_phone} onChange={e => setForm(f => ({ ...f, emergency_contact_phone: e.target.value }))} />
               </div>
             </div>
 

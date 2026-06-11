@@ -1,9 +1,9 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Plus, Edit2, Trash2, Users, Phone, X, ChevronDown } from 'lucide-react';
-import { AREAS } from '../../data/mockData';
+import { AREAS } from '../../data/publicData';
 
 function TeamForm({ initial, onSave, onClose }) {
   const [form, setForm] = useState(initial || {
@@ -30,7 +30,7 @@ function TeamForm({ initial, onSave, onClose }) {
         </div>
         <div>
           <label className="form-label">Số điện thoại *</label>
-          <input className="form-input" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} required placeholder="0912345678" />
+          <input className="form-input" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} required placeholder="Số điện thoại" />
         </div>
         <div>
           <label className="form-label">Phương tiện</label>

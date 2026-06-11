@@ -1,10 +1,10 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Plus, Edit2, Trash2, Bell, Send, Eye, Filter, Search, X } from 'lucide-react';
 import { StatusBadge, LevelBadge } from '../../components/common/StatusBadge';
-import { AREAS } from '../../data/mockData';
+import { AREAS } from '../../data/publicData';
 
 const LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'EMERGENCY'];
 const LEVEL_LABELS = { LOW: 'Thấp', MEDIUM: 'Trung bình', HIGH: 'Cao', EMERGENCY: 'Khẩn cấp' };
@@ -92,14 +92,14 @@ export default function AlertsManager() {
     return true;
   });
 
-  const handleSave = (form) => {
+  const handleSave = async (form) => {
     const area = AREAS.find(a => a.id === form.area_id);
     if (editWarning) {
-      updateWarning(editWarning.id, { ...form, area_name: area?.old_name });
+      await updateWarning(editWarning.id, { ...form, area_name: area?.old_name });
       toast.success('Đã cập nhật cảnh báo!');
       addLog(currentUser?.id, currentUser?.full_name, 'Cập nhật cảnh báo', 'flood_warnings', editWarning.id, `Cập nhật: ${form.title}`);
     } else {
-      const w = createWarning({ ...form, area_name: area?.old_name, created_by: currentUser?.id });
+      const w = await createWarning({ ...form, area_name: area?.old_name, created_by: currentUser?.id });
       toast.success('Đã tạo cảnh báo mới!');
       addLog(currentUser?.id, currentUser?.full_name, 'Tạo cảnh báo', 'flood_warnings', w.id, form.title);
     }
@@ -114,7 +114,7 @@ export default function AlertsManager() {
   };
 
   const handleSendSMS = (w) => {
-    const mockPhones = ['0912345678', '0923456789', '0934567890', '0945678901', '0956789012'];
+    const mockPhones = Array.from({ length: 5 }, (_, index) => `recipient-${index + 1}`);
     mockPhones.forEach(phone => {
       addSmsLog({
         phone,

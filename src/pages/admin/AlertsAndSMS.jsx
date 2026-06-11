@@ -1,9 +1,9 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { Search, Filter, X, Send, MessageSquare } from 'lucide-react';
-import { AREAS } from '../../data/mockData';
+import { AREAS } from '../../data/publicData';
 
 function SendSMSModal({ onSend, onClose }) {
   const { floodWarnings, rescueTeams } = useData();
@@ -99,8 +99,8 @@ export default function AlertsAndSMS() {
   const totalCost = smsLogs.filter(s => s.status === 'SENT').reduce((sum, s) => sum + (s.cost || 0), 0);
 
   const handleSend = (form) => {
-    const mockPhones = ['0912345678', '0923456789', '0934567890', '0945678901', '0956789012', '0967890123', '0978901234'];
-    const phones = form.target === 'all' ? mockPhones : mockPhones.slice(0, 4);
+    const recipientCount = form.target === 'all' ? 7 : 4;
+    const phones = Array.from({ length: recipientCount }, (_, index) => `recipient-${index + 1}`);
     phones.forEach(phone => {
       addSmsLog({ phone, message: form.custom_message, provider: 'Viettel SMS', status: Math.random() > 0.08 ? 'SENT' : 'FAILED', cost: 500, related_warning_id: null, related_request_id: null });
     });
