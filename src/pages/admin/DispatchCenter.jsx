@@ -7,6 +7,13 @@ import L from 'leaflet';
 import { StatusBadge, LevelBadge } from '../../components/common/StatusBadge';
 import { haversineDistance, formatDistance } from '../../utils/haversine';
 import {
+  getMissionStatusColor,
+  getRequestAddress,
+  getRequestLatLng,
+  getRequestName,
+  isNeedsVerification,
+} from '../../utils/rescueCoordination';
+import {
   Navigation, CheckCircle, AlertTriangle, Phone, MapPin, Clock, Activity,
   ChevronRight, Filter, Maximize2, Send, X, User
 } from 'lucide-react';
@@ -18,6 +25,16 @@ const victimIcon = L.divIcon({
   iconSize: [28, 28],
   iconAnchor: [14, 14],
 });
+
+const createRescuePointIcon = (status = 'PENDING', label = '🆘') => {
+  const color = status === 'PENDING' ? '#dc2626' : getMissionStatusColor(status);
+  return L.divIcon({
+    className: '',
+    html: `<div style="background:${color};width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:14px;border:3px solid white;box-shadow:0 2px 8px rgba(15,23,42,0.35);">${label}</div>`,
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+  });
+};
 
 const rescuerIcon = L.divIcon({
   className: '',
@@ -74,6 +91,10 @@ export default function DispatchCenter() {
   const displayMissions = filterStatus ? rescueMissions.filter(m => m.status === filterStatus) : rescueMissions;
   const safeZonesWithLocation = safeZones.filter(sz => hasLatLng(sz.latitude, sz.longitude));
   const missionsWithVictimLocation = rescueMissions.filter(missionHasVictimLocation);
+  const pendingRequestsWithLocation = rescueRequests
+    .filter(request => request.status === 'PENDING')
+    .map(request => ({ request, position: getRequestLatLng(request) }))
+    .filter(item => item.position);
 
   const handleSelectMission = (mission) => {
     setSelectedMission(mission);
@@ -163,8 +184,9 @@ export default function DispatchCenter() {
               {missionsByStatus.pending.slice(0, 3).map(r => (
                 <div key={r.id} style={{ background: 'white', borderRadius: 6, padding: '0.5rem 0.625rem', marginBottom: '0.375rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <div>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{r.full_name}</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{getRequestName(r)}</div>
                     <div style={{ fontSize: '0.68rem', color: '#64748b' }}>📍 {r.area_name}</div>
+                    {isNeedsVerification(r) && <div style={{ fontSize: '0.66rem', color: '#dc2626', fontWeight: 700 }}>Can xac minh vi tri</div>}
                   </div>
                   <LevelBadge level={r.emergency_level} />
                 </div>
@@ -270,16 +292,32 @@ export default function DispatchCenter() {
               </Marker>
             ))}
 
+            {/* Pending rescue requests */}
+            {pendingRequestsWithLocation.map(({ request, position }) => (
+              <Marker key={request.id} position={[position.lat, position.lng]} icon={createRescuePointIcon('PENDING', '⏳')}>
+                <Popup>
+                  <div style={{ fontSize: '0.82rem' }}>
+                    <div style={{ fontWeight: 700, color: '#dc2626' }}>Dang cho phan cong: {getRequestName(request)}</div>
+                    <div style={{ color: '#64748b', marginTop: 4 }}>{getRequestAddress(request)}</div>
+                    <div style={{ marginTop: 4 }}><LevelBadge level={request.emergency_level} /></div>
+                    {isNeedsVerification(request) && <div style={{ marginTop: 4, color: '#dc2626', fontWeight: 700 }}>Can xac minh vi tri</div>}
+                  </div>
+                </Popup>
+              </Marker>
+            ))}
+
             {/* Missions */}
             {missionsWithVictimLocation.map(m => (
               <div key={m.id}>
                 {/* Victim */}
-                <Marker position={[m.victim_latitude, m.victim_longitude]} icon={victimIcon}>
+                <Marker position={[m.victim_latitude, m.victim_longitude]} icon={createRescuePointIcon(m.status, m.mission_type === 'SUPPORT_OR_CLUSTER' ? '➕' : '🆘')}>
                   <Popup>
                     <div style={{ fontSize: '0.82rem' }}>
                       <div style={{ fontWeight: 700, color: '#dc2626' }}>🆘 {m.victim_name}</div>
                       <div style={{ color: '#64748b', marginTop: 4 }}>{m.victim_address}</div>
                       <div style={{ marginTop: 4 }}><StatusBadge status={m.status} /></div>
+                      <div style={{ marginTop: 4, color: '#2563eb', fontWeight: 700 }}>Da co doi {m.team_name} phu trach</div>
+                      {m.linked_mission_id && <div style={{ marginTop: 4, color: '#7c3aed' }}>Ho tro/cum voi: {m.linked_mission_id}</div>}
                     </div>
                   </Popup>
                 </Marker>
@@ -318,7 +356,9 @@ export default function DispatchCenter() {
           }}>
             <div style={{ fontWeight: 700, marginBottom: '0.5rem', color: '#0f172a' }}>Chú thích bản đồ</div>
             {[
-              { icon: '🆘', label: 'Vị trí nạn nhân', color: '#ef4444' },
+              { icon: '⏳', label: 'Yeu cau cho phan cong', color: '#dc2626' },
+              { icon: '🆘', label: 'Da co doi phu trach', color: '#2563eb' },
+              { icon: '➕', label: 'Nhiem vu ho tro/cum', color: '#7c3aed' },
               { icon: '🛡️', label: 'Đội cứu hộ', color: '#10b981' },
               { icon: '🏫', label: 'Điểm sơ tán', color: '#3b82f6' },
               { icon: '⭕', label: 'Vùng geofence 100m', color: '#f97316' },

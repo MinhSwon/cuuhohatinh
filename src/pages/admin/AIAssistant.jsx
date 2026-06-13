@@ -1,6 +1,7 @@
 ﻿import { useState, useRef } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { Bot, Send, Loader } from 'lucide-react';
+import { getSafeZoneOccupancy } from '../../utils/safeZones';
 
 const INITIAL_MESSAGES = [
   {
@@ -44,8 +45,8 @@ function generateAIResponse(message, data) {
 
   if (msg.includes('điểm sơ tán') || msg.includes('shelter')) {
     return `🏫 **Tình trạng điểm sơ tán:**\n\n${safeZones.map(sz => {
-      const pct = Math.round((sz.current_people / sz.capacity) * 100);
-      return `${pct >= 100 ? '🔴' : pct >= 75 ? '🟡' : '🟢'} **${sz.name}**: ${sz.current_people}/${sz.capacity} người (${pct}%)`;
+      const occupancy = getSafeZoneOccupancy(sz);
+      return `${occupancy.percent >= 100 ? '🔴' : occupancy.percent >= 75 ? '🟡' : '🟢'} **${occupancy.name}**: ${occupancy.current_people}/${occupancy.capacity || '?'} người (${occupancy.hasCapacity ? `${occupancy.percent}%` : 'thiếu dữ liệu'})`;
     }).join('\n')}\n\n💡 **Khuyến nghị:** Ưu tiên đưa người đến các điểm còn nhiều chỗ trống.`;
   }
 

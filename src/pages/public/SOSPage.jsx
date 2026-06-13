@@ -20,7 +20,11 @@ export default function SOSPage() {
 
   const [step, setStep] = useState('TYPE'); // TYPE → PHONE → LOCATION → SENDING → DONE
   const [selectedType, setSelectedType] = useState(null);
+  const [requesterType, setRequesterType] = useState('SELF');
   const [phone, setPhone] = useState('');
+  const [reporterName, setReporterName] = useState('');
+  const [victimName, setVictimName] = useState('');
+  const [victimPhone, setVictimPhone] = useState('');
   const [gps, setGps] = useState(null);
   const [gpsError, setGpsError] = useState(false);
   const [gpsLoading, setGpsLoading] = useState(false);
@@ -91,6 +95,36 @@ export default function SOSPage() {
 
   const submitRequest = async () => {
     const area = AREAS.find(a => a.id === areaId);
+    const isRemoteReport = requesterType !== 'SELF';
+    const victimDisplayName = isRemoteReport ? (victimName || 'Nguoi can cuu ho') : 'Nguoi dung SOS';
+    const victimContactPhone = isRemoteReport ? victimPhone : phone;
+    const victimLat = isRemoteReport ? null : (gps?.lat || null);
+    const victimLng = isRemoteReport ? null : (gps?.lon || null);
+    const reporterLat = isRemoteReport ? (gps?.lat || null) : null;
+    const reporterLng = isRemoteReport ? (gps?.lon || null) : null;
+    const rescueIdentityPayload = {
+      full_name: victimDisplayName,
+      phone: victimContactPhone || phone,
+      area_id: areaId || '',
+      area_name: area?.old_name || 'Chua xac dinh',
+      address_detail: addressNote || (gps && !isRemoteReport ? `GPS: ${gps.lat.toFixed(5)}, ${gps.lon.toFixed(5)}` : 'Can xac minh vi tri'),
+      description: `SOS khan cap qua nut SOS. Loai: ${selectedType?.label}. ${isRemoteReport ? 'Nguoi bao ho dang bao thay nguoi than. ' : ''}${addressNote ? 'Ghi chu: ' + addressNote : ''}`,
+      latitude: victimLat,
+      longitude: victimLng,
+      requester_type: requesterType,
+      reporter_name: isRemoteReport ? (reporterName || 'Nguoi bao ho') : victimDisplayName,
+      reporter_phone: phone,
+      reporter_relationship: isRemoteReport ? 'Bao ho nguoi than' : 'SELF',
+      reporter_latitude: reporterLat,
+      reporter_longitude: reporterLng,
+      victim_name: victimDisplayName,
+      victim_phone: victimContactPhone || phone,
+      victim_area_id: areaId || '',
+      victim_area_name: area?.old_name || 'Chua xac dinh',
+      victim_address_detail: addressNote || (gps && !isRemoteReport ? `GPS: ${gps.lat.toFixed(5)}, ${gps.lon.toFixed(5)}` : 'Can xac minh vi tri'),
+      victim_latitude: victimLat,
+      victim_longitude: victimLng,
+    };
     try {
       const req = await createRescueRequest({
         full_name: 'Người dùng SOS',
@@ -108,6 +142,7 @@ export default function SOSPage() {
         has_disabled: false,
         has_medical_case: selectedType?.emoji === '👴',
         sos_mode: true,
+        ...rescueIdentityPayload,
       });
       addNotification(null, '🆘 SOS KHẨN CẤP!', `${phone} cần cứu hộ — ${selectedType?.label}${gps ? ` (GPS: ${gps.lat.toFixed(4)}, ${gps.lon.toFixed(4)})` : ''}`, 'RESCUE_REQUEST', req.id);
       setResult(req);
@@ -121,6 +156,10 @@ export default function SOSPage() {
       setCountdown(null);
     }
   };
+
+  const canSendRequest = requesterType === 'SELF'
+    ? Boolean(gps || areaId)
+    : Boolean(areaId && addressNote.trim());
 
   return (
     <div style={{
@@ -254,6 +293,61 @@ export default function SOSPage() {
               </div>
             </div>
 
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1rem' }}>
+              {[
+                { value: 'SELF', label: 'Toi can cuu' },
+                { value: 'RELATIVE', label: 'Bao ho nguoi than' },
+              ].map(option => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => setRequesterType(option.value)}
+                  style={{
+                    padding: '0.65rem 0.5rem',
+                    borderRadius: 10,
+                    border: `1px solid ${requesterType === option.value ? '#f87171' : 'rgba(255,255,255,0.12)'}`,
+                    background: requesterType === option.value ? 'rgba(239,68,68,0.18)' : 'rgba(255,255,255,0.06)',
+                    color: requesterType === option.value ? '#fecaca' : '#94a3b8',
+                    cursor: 'pointer',
+                    fontSize: '0.74rem',
+                    fontWeight: 800,
+                  }}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+
+            {requesterType !== 'SELF' && (
+              <div style={{ display: 'grid', gap: '0.625rem', marginBottom: '1rem', textAlign: 'left' }}>
+                <input
+                  type="text"
+                  placeholder="Ten nguoi can cuu"
+                  value={victimName}
+                  onChange={e => setVictimName(e.target.value)}
+                  style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, padding: '0.625rem 0.875rem', color: 'white', fontSize: '0.85rem', outline: 'none' }}
+                />
+                <input
+                  type="tel"
+                  inputMode="numeric"
+                  placeholder="So dien thoai nguoi can cuu neu co"
+                  value={victimPhone}
+                  onChange={e => setVictimPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                  style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, padding: '0.625rem 0.875rem', color: 'white', fontSize: '0.85rem', outline: 'none' }}
+                />
+                <input
+                  type="text"
+                  placeholder="Ten nguoi bao neu muon de lai"
+                  value={reporterName}
+                  onChange={e => setReporterName(e.target.value)}
+                  style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, padding: '0.625rem 0.875rem', color: 'white', fontSize: '0.85rem', outline: 'none' }}
+                />
+                <p style={{ color: '#fbbf24', fontSize: '0.68rem', lineHeight: 1.5, margin: 0 }}>
+                  GPS hien tai chi duoc luu la vi tri nguoi bao. Hay nhap khu vuc va dia chi cua nguoi can cuu o buoc tiep theo.
+                </p>
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: '0.75rem', marginBottom: '1.25rem' }}>
               <div style={{ flex: 1 }}>
                 <label style={{ display: 'block', color: '#94a3b8', fontSize: '0.7rem', marginBottom: '0.375rem' }}>Số người cần cứu</label>
@@ -365,14 +459,14 @@ export default function SOSPage() {
             {/* Send button */}
             <button
               onClick={handleSend}
-              disabled={!gps && !areaId}
+              disabled={!canSendRequest}
               style={{
                 width: '100%', padding: '1.125rem', borderRadius: 14, border: 'none',
-                background: (gps || areaId) ? 'linear-gradient(135deg, #dc2626, #b91c1c)' : 'rgba(255,255,255,0.08)',
-                color: 'white', fontSize: '1.1rem', fontWeight: 900, cursor: (gps || areaId) ? 'pointer' : 'not-allowed',
+                background: canSendRequest ? 'linear-gradient(135deg, #dc2626, #b91c1c)' : 'rgba(255,255,255,0.08)',
+                color: 'white', fontSize: '1.1rem', fontWeight: 900, cursor: canSendRequest ? 'pointer' : 'not-allowed',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.625rem',
-                boxShadow: (gps || areaId) ? '0 8px 30px rgba(220,38,38,0.5)' : 'none',
-                animation: (gps || areaId) ? 'sosPulse 2s infinite' : 'none',
+                boxShadow: canSendRequest ? '0 8px 30px rgba(220,38,38,0.5)' : 'none',
+                animation: canSendRequest ? 'sosPulse 2s infinite' : 'none',
                 transition: 'all 0.2s',
               }}
             >
@@ -475,7 +569,7 @@ export default function SOSPage() {
                 </a>
               </div>
               <button
-                onClick={() => { setStep('TYPE'); setPhone(''); setGps(null); setAreaId(''); setAddressNote(''); setPeopleCount(1); setResult(null); }}
+                onClick={() => { setStep('TYPE'); setRequesterType('SELF'); setPhone(''); setReporterName(''); setVictimName(''); setVictimPhone(''); setGps(null); setAreaId(''); setAddressNote(''); setPeopleCount(1); setResult(null); }}
                 style={{ width: '100%', padding: '0.75rem', borderRadius: 10, border: '1px solid rgba(255,255,255,0.1)', background: 'transparent', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}
               >
                 Gửi yêu cầu khác

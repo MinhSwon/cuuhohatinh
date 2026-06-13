@@ -1,10 +1,9 @@
-﻿import { useState } from 'react';
-import { useData } from '../../contexts/DataContext';
+﻿import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
-import { useToast } from '../../contexts/ToastContext';
 import { StatusBadge, LevelBadge } from '../../components/common/StatusBadge';
 import { Link } from 'react-router-dom';
-import { AlertTriangle, Bell, Phone, MapPin, CheckCircle, Clock, Shield } from 'lucide-react';
+import { AlertTriangle, Bell, Phone, CheckCircle, Shield } from 'lucide-react';
+import { getPublicSafeZones } from '../../utils/safeZones';
 
 export default function CitizenDashboard() {
   const { currentUser } = useAuth();
@@ -16,7 +15,8 @@ export default function CitizenDashboard() {
     ? activeWarnings.filter(w => w.area_id === myProfile.area_id)
     : activeWarnings;
   const myRequests = rescueRequests.filter(r => r.user_id === currentUser?.id || r.phone === currentUser?.phone);
-  const nearSafeZones = safeZones.filter(sz => !myProfile || sz.area_id === myProfile.area_id);
+  const publicSafeZones = getPublicSafeZones(safeZones);
+  const nearSafeZones = publicSafeZones.filter(sz => !myProfile || sz.area_id === myProfile.area_id);
 
   const EMERGENCY_CONTACTS = [
     { name: 'Ban PCTT Hương Khê', phone: '0693 851 000' },

@@ -17,6 +17,12 @@ export default function RescueRequest() {
   const [form, setForm] = useState({
     full_name: currentUser?.full_name || '',
     phone: currentUser?.phone || '',
+    requester_type: 'SELF',
+    reporter_name: currentUser?.full_name || '',
+    reporter_phone: currentUser?.phone || '',
+    reporter_relationship: '',
+    victim_name: currentUser?.full_name || '',
+    victim_phone: currentUser?.phone || '',
     area_id: myProfile?.area_id || '',
     address_detail: myProfile?.address_detail || '',
     description: '',
@@ -46,16 +52,38 @@ export default function RescueRequest() {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     const area = AREAS.find(a => a.id === form.area_id);
-    setTimeout(() => {
-      const req = createRescueRequest({ ...form, area_name: area?.old_name, user_id: currentUser?.id });
+    const isRemoteReport = form.requester_type !== 'SELF';
+    const payload = {
+      ...form,
+      full_name: isRemoteReport ? (form.victim_name || 'Nguoi can cuu ho') : form.full_name,
+      phone: isRemoteReport ? (form.victim_phone || form.phone) : form.phone,
+      area_name: area?.old_name,
+      user_id: currentUser?.id,
+      reporter_name: isRemoteReport ? (form.reporter_name || currentUser?.full_name || form.full_name) : form.full_name,
+      reporter_phone: isRemoteReport ? (form.reporter_phone || currentUser?.phone || form.phone) : form.phone,
+      reporter_relationship: isRemoteReport ? (form.reporter_relationship || 'Nguoi than') : 'SELF',
+      victim_name: isRemoteReport ? (form.victim_name || 'Nguoi can cuu ho') : form.full_name,
+      victim_phone: isRemoteReport ? form.victim_phone : form.phone,
+      victim_area_id: form.area_id,
+      victim_area_name: area?.old_name,
+      victim_address_detail: form.address_detail,
+      victim_latitude: form.latitude,
+      victim_longitude: form.longitude,
+    };
+    try {
+      const req = await createRescueRequest(payload);
       addNotification(null, '🆘 Yêu cầu cứu hộ mới!', `${form.full_name} cần hỗ trợ tại ${area?.old_name}`, 'RESCUE_REQUEST', req.id);
       setSubmitted(true);
+    } catch (err) {
+      console.error('Failed to submit rescue request:', err);
+      toast.error('Khong gui duoc yeu cau. Vui long thu lai.');
+    } finally {
       setLoading(false);
-    }, 1000);
+    }
   };
 
   if (submitted) {
@@ -125,6 +153,57 @@ export default function RescueRequest() {
                 ))}
               </div>
             </div>
+
+            <div>
+              <label className="form-label">Ai dang can cuu ho? *</label>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem' }}>
+                {[
+                  { value: 'SELF', label: 'Toi / ho gia dinh toi' },
+                  { value: 'RELATIVE', label: 'Bao ho nguoi than' },
+                ].map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setForm(f => ({
+                      ...f,
+                      requester_type: option.value,
+                      reporter_name: option.value === 'SELF' ? f.full_name : (f.reporter_name || currentUser?.full_name || ''),
+                      reporter_phone: option.value === 'SELF' ? f.phone : (f.reporter_phone || currentUser?.phone || ''),
+                    }))}
+                    style={{
+                      padding: '0.75rem',
+                      borderRadius: 10,
+                      border: `2px solid ${form.requester_type === option.value ? '#dc2626' : '#e2e8f0'}`,
+                      background: form.requester_type === option.value ? '#fef2f2' : 'white',
+                      color: form.requester_type === option.value ? '#b91c1c' : '#475569',
+                      cursor: 'pointer',
+                      fontSize: '0.8rem',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {form.requester_type !== 'SELF' && (
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '0.875rem' }}>
+                <div style={{ fontSize: '0.78rem', color: '#92400e', fontWeight: 700, marginBottom: '0.625rem' }}>
+                  Thong tin bao ho va nguoi can cuu
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>
+                  <input className="form-input" placeholder="Ten nguoi can cuu *" value={form.victim_name} onChange={e => setForm(f => ({ ...f, victim_name: e.target.value }))} required />
+                  <input className="form-input" placeholder="SDT nguoi can cuu neu co" value={form.victim_phone} onChange={e => setForm(f => ({ ...f, victim_phone: e.target.value }))} />
+                  <input className="form-input" placeholder="Ten nguoi bao" value={form.reporter_name} onChange={e => setForm(f => ({ ...f, reporter_name: e.target.value }))} />
+                  <input className="form-input" placeholder="SDT nguoi bao" value={form.reporter_phone} onChange={e => setForm(f => ({ ...f, reporter_phone: e.target.value }))} />
+                  <input className="form-input" placeholder="Moi quan he" value={form.reporter_relationship} onChange={e => setForm(f => ({ ...f, reporter_relationship: e.target.value }))} />
+                  <div style={{ fontSize: '0.72rem', color: '#92400e', display: 'flex', alignItems: 'center' }}>
+                    Dia chi ben duoi la cua nguoi can cuu.
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.875rem' }}>
               <div>

@@ -161,23 +161,32 @@ const COLLECTION_NAMES = Object.keys(db);
 const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN'];
 const RESCUE_ROLES = ['RESCUE_LEADER', 'RESCUE_MEMBER'];
 const DANGEROUS_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+const TEST_SAFE_ZONE_NAME_PATTERN = /\b(test|fake|stress|demo|sample|dummy)\b/i;
 const WARNING_FIELDS = ['title', 'content', 'level', 'status', 'area_id', 'area_name', 'start_time', 'end_time'];
 const RESCUE_REQUEST_PUBLIC_FIELDS = [
   'full_name', 'phone', 'area_id', 'area_name', 'address_detail', 'description', 'note',
   'number_of_people', 'emergency_level', 'latitude', 'longitude', 'has_elderly',
-  'has_children', 'has_disabled', 'has_medical_case', 'sos_mode',
+  'has_children', 'has_disabled', 'has_medical_case', 'need_food_water', 'sos_mode',
+  'requester_type', 'reporter_name', 'reporter_phone', 'reporter_relationship',
+  'reporter_latitude', 'reporter_longitude', 'victim_name', 'victim_phone',
+  'victim_area_id', 'victim_area_name', 'victim_address_detail', 'victim_latitude',
+  'victim_longitude',
 ];
 const RESCUE_REQUEST_UPDATE_FIELDS = [
   ...RESCUE_REQUEST_PUBLIC_FIELDS, 'status', 'assigned_team_id', 'assigned_team_name',
-  'accepted_at', 'completed_at',
+  'accepted_at', 'completed_at', 'verification_status', 'priority_score',
+  'duplicate_group_id', 'cluster_id', 'nearby_active_mission_id',
+  'nearby_active_team_name', 'coordination_note',
 ];
 const TEAM_FIELDS = [
   'team_name', 'name', 'phone', 'leader_user_id', 'leader_id', 'leader_name',
-  'status', 'latitude', 'longitude', 'member_count', 'memberCount', 'notes', 'area_id', 'area_name',
+  'status', 'latitude', 'longitude', 'member_count', 'memberCount', 'vehicle_type', 'note', 'notes', 'area_id', 'area_name',
+  'max_active_missions', 'current_active_missions', 'max_people_per_trip',
+  'vehicle_capacity', 'service_radius_km', 'equipment_tags',
 ];
 const SAFE_ZONE_FIELDS = [
   'name', 'address', 'area_id', 'area_name', 'capacity', 'current_people', 'latitude',
-  'longitude', 'manager_name', 'manager_phone', 'notes', 'status',
+  'longitude', 'contact_person', 'contact_phone', 'manager_name', 'manager_phone', 'notes', 'status',
 ];
 const ROUTE_FIELDS = [
   'name', 'from_location', 'to_location', 'area_id', 'area_name', 'distance_km',
@@ -261,6 +270,32 @@ function rescueRequestRowToApi(row) {
     emergency_level: row.emergency_level,
     latitude: row.latitude,
     longitude: row.longitude,
+    has_elderly: row.has_elderly,
+    has_children: row.has_children,
+    has_disabled: row.has_disabled,
+    has_medical_case: row.has_medical_case,
+    need_food_water: row.need_food_water,
+    sos_mode: row.sos_mode,
+    requester_type: row.requester_type,
+    reporter_name: row.reporter_name,
+    reporter_phone: row.reporter_phone,
+    reporter_relationship: row.reporter_relationship,
+    reporter_latitude: row.reporter_latitude,
+    reporter_longitude: row.reporter_longitude,
+    victim_name: row.victim_name,
+    victim_phone: row.victim_phone,
+    victim_area_id: row.victim_area_id,
+    victim_area_name: row.victim_area_name,
+    victim_address_detail: row.victim_address_detail,
+    victim_latitude: row.victim_latitude,
+    victim_longitude: row.victim_longitude,
+    verification_status: row.verification_status,
+    priority_score: row.priority_score,
+    duplicate_group_id: row.duplicate_group_id,
+    cluster_id: row.cluster_id,
+    nearby_active_mission_id: row.nearby_active_mission_id,
+    nearby_active_team_name: row.nearby_active_team_name,
+    coordination_note: row.coordination_note,
     status: row.status,
     assigned_team_id: row.assigned_team_id,
     assigned_team_name: row.assigned_team_name,
@@ -301,6 +336,256 @@ function pickAllowed(source, allowedKeys) {
   }, {});
 }
 
+function toFiniteNumber(value, fallback = 0) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+const ACTIVE_RESCUE_STATUSES = new Set([
+  'ASSIGNED',
+  'ACCEPTED',
+  'MOVING',
+  'NEAR_VICTIM',
+  'ARRIVED_CONFIRMED',
+  'RESCUING',
+  'NEED_SUPPORT',
+]);
+
+function normalizeBoolean(value) {
+  return value === true || value === 'true' || value === 1 || value === '1';
+}
+
+function toOptionalNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function getLatLng(item, latKeys = ['latitude', 'victim_latitude'], lngKeys = ['longitude', 'victim_longitude']) {
+  for (const latKey of latKeys) {
+    for (const lngKey of lngKeys) {
+      const lat = toOptionalNumber(item?.[latKey]);
+      const lng = toOptionalNumber(item?.[lngKey]);
+      if (lat !== null && lng !== null) return { lat, lng };
+    }
+  }
+  return null;
+}
+
+function haversineMeters(lat1, lon1, lat2, lon2) {
+  const earthRadiusMeters = 6371000;
+  const toRad = degrees => degrees * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return earthRadiusMeters * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+function calculatePriorityScore(data) {
+  const levelScore = { LOW: 5, MEDIUM: 15, HIGH: 30, EMERGENCY: 50 }[data.emergency_level] || 20;
+  const people = Math.max(1, Number.parseInt(data.number_of_people, 10) || 1);
+  return levelScore +
+    people * 2 +
+    (normalizeBoolean(data.has_children) ? 9 : 0) +
+    (normalizeBoolean(data.has_elderly) ? 9 : 0) +
+    (normalizeBoolean(data.has_disabled) ? 12 : 0) +
+    (normalizeBoolean(data.has_medical_case) ? 15 : 0) +
+    (normalizeBoolean(data.need_food_water) ? 6 : 0);
+}
+
+function normalizeRescueRequestInput(rawData, user) {
+  const data = { ...rawData };
+  const requesterType = ['SELF', 'RELATIVE', 'WITNESS', 'OPERATOR'].includes(data.requester_type)
+    ? data.requester_type
+    : 'SELF';
+
+  const victimName = data.victim_name || data.full_name || 'Nguoi can cuu ho';
+  const victimPhone = data.victim_phone || data.phone || '';
+  const victimAreaId = data.victim_area_id || data.area_id || '';
+  const victimAreaName = data.victim_area_name || data.area_name || '';
+  const victimAddress = data.victim_address_detail || data.address_detail || '';
+  const victimLatitude = toOptionalNumber(data.victim_latitude ?? data.latitude);
+  const victimLongitude = toOptionalNumber(data.victim_longitude ?? data.longitude);
+  const reporterLatitude = toOptionalNumber(data.reporter_latitude);
+  const reporterLongitude = toOptionalNumber(data.reporter_longitude);
+
+  const verificationStatus = requesterType === 'SELF' || (victimLatitude !== null && victimLongitude !== null)
+    ? 'VERIFIED'
+    : 'NEEDS_VERIFICATION';
+
+  return {
+    ...data,
+    user_id: user?.id || data.user_id || null,
+    requester_type: requesterType,
+    reporter_name: data.reporter_name || (requesterType === 'SELF' ? victimName : ''),
+    reporter_phone: data.reporter_phone || (requesterType === 'SELF' ? victimPhone : ''),
+    reporter_relationship: data.reporter_relationship || (requesterType === 'SELF' ? 'SELF' : ''),
+    reporter_latitude: reporterLatitude,
+    reporter_longitude: reporterLongitude,
+    victim_name: victimName,
+    victim_phone: victimPhone,
+    victim_area_id: victimAreaId,
+    victim_area_name: victimAreaName,
+    victim_address_detail: victimAddress,
+    victim_latitude: victimLatitude,
+    victim_longitude: victimLongitude,
+    full_name: victimName,
+    phone: victimPhone,
+    area_id: victimAreaId,
+    area_name: victimAreaName,
+    address_detail: victimAddress,
+    latitude: victimLatitude,
+    longitude: victimLongitude,
+    has_elderly: normalizeBoolean(data.has_elderly),
+    has_children: normalizeBoolean(data.has_children),
+    has_disabled: normalizeBoolean(data.has_disabled),
+    has_medical_case: normalizeBoolean(data.has_medical_case),
+    need_food_water: normalizeBoolean(data.need_food_water),
+    sos_mode: normalizeBoolean(data.sos_mode),
+    number_of_people: Math.max(1, Number.parseInt(data.number_of_people, 10) || 1),
+    emergency_level: ['LOW', 'MEDIUM', 'HIGH', 'EMERGENCY'].includes(data.emergency_level) ? data.emergency_level : 'HIGH',
+    verification_status: data.verification_status || verificationStatus,
+  };
+}
+
+function findNearbyActiveMissionForRequest(request, radiusMeters = 250) {
+  const requestPos = getLatLng(request);
+  if (!requestPos || !Array.isArray(db.rescueMissions)) return null;
+
+  let closest = null;
+  for (const mission of db.rescueMissions) {
+    if (!ACTIVE_RESCUE_STATUSES.has(mission.status)) continue;
+    const missionPos = getLatLng(mission, ['victim_latitude'], ['victim_longitude']);
+    if (!missionPos) continue;
+    const distance = haversineMeters(requestPos.lat, requestPos.lng, missionPos.lat, missionPos.lng);
+    if (distance <= radiusMeters && (!closest || distance < closest.distance_meters)) {
+      closest = {
+        mission,
+        distance_meters: Math.round(distance),
+      };
+    }
+  }
+  return closest;
+}
+
+function enrichRescueRequestCoordination(data) {
+  const nearby = findNearbyActiveMissionForRequest(data);
+  const priorityScore = calculatePriorityScore(data);
+  const clusterSeed = data.area_id || data.area_name || 'unknown';
+
+  return {
+    ...data,
+    priority_score: priorityScore,
+    duplicate_group_id: nearby ? nearby.mission.rescue_request_id || nearby.mission.id : null,
+    cluster_id: nearby ? nearby.mission.cluster_id || `cluster-${clusterSeed}` : `cluster-${clusterSeed}`,
+    nearby_active_mission_id: nearby?.mission?.id || null,
+    nearby_active_team_name: nearby?.mission?.team_name || null,
+    coordination_note: nearby
+      ? `Gan nhiem vu ${nearby.mission.id} cua ${nearby.mission.team_name} (${nearby.distance_meters}m). Nen gom cum hoac dieu doi ho tro.`
+      : '',
+  };
+}
+
+function getTeamActiveMissionCount(teamId) {
+  if (!teamId || !Array.isArray(db.rescueMissions)) return 0;
+  return db.rescueMissions.filter(mission =>
+    mission.rescue_team_id === teamId && ACTIVE_RESCUE_STATUSES.has(mission.status)
+  ).length;
+}
+
+function getTeamMaxActiveMissions(team) {
+  const configured = Number.parseInt(team?.max_active_missions, 10);
+  if (Number.isFinite(configured) && configured > 0) return configured;
+  return team?.status === 'BUSY' ? 1 : 2;
+}
+
+function syncTeamLoad(teamId) {
+  if (!teamId || !Array.isArray(db.rescueTeams)) return null;
+  const team = db.rescueTeams.find(item => item.id === teamId);
+  if (!team) return null;
+
+  const activeCount = getTeamActiveMissionCount(teamId);
+  const maxActive = getTeamMaxActiveMissions(team);
+  team.current_active_missions = activeCount;
+
+  if (!['OFFLINE', 'MAINTENANCE'].includes(team.status)) {
+    team.status = activeCount >= maxActive ? 'BUSY' : 'AVAILABLE';
+  }
+
+  return team;
+}
+
+function getAssignmentWarnings(request, team) {
+  const warnings = [];
+  if (request?.nearby_active_mission_id) {
+    warnings.push({
+      type: 'NEARBY_ACTIVE_MISSION',
+      message: `Khu vuc nay da co doi ${request.nearby_active_team_name || 'khac'} dang den. Nen xac minh de tranh nhieu doi cung den mot diem.`,
+    });
+  }
+
+  if (!getLatLng(request)) {
+    warnings.push({
+      type: 'NEEDS_LOCATION_VERIFICATION',
+      message: 'Yeu cau chua co toa do GPS cua nguoi can cuu. Can goi xac minh truoc khi dieu phoi.',
+    });
+  }
+
+  if (team) {
+    const activeCount = getTeamActiveMissionCount(team.id);
+    const maxActive = getTeamMaxActiveMissions(team);
+    if (activeCount >= maxActive) {
+      warnings.push({
+        type: 'TEAM_OVER_CAPACITY',
+        message: `${team.team_name || team.name || 'Doi cuu ho'} da dat tai ${activeCount}/${maxActive} nhiem vu dang xu ly.`,
+      });
+    }
+    if (['OFFLINE', 'MAINTENANCE'].includes(team.status)) {
+      warnings.push({
+        type: 'TEAM_UNAVAILABLE',
+        message: `${team.team_name || team.name || 'Doi cuu ho'} dang o trang thai ${team.status}.`,
+      });
+    }
+  }
+
+  return warnings;
+}
+
+function normalizeSafeZone(safeZone) {
+  const capacity = Math.max(0, Math.round(toFiniteNumber(safeZone?.capacity)));
+  const currentPeople = Math.max(0, Math.round(toFiniteNumber(safeZone?.current_people)));
+
+  return {
+    ...safeZone,
+    name: String(safeZone?.name || '').trim(),
+    address: String(safeZone?.address || '').trim(),
+    area_name: String(safeZone?.area_name || '').trim(),
+    capacity,
+    current_people: currentPeople,
+    contact_person: String(safeZone?.contact_person || safeZone?.manager_name || '').trim(),
+    contact_phone: String(safeZone?.contact_phone || safeZone?.manager_phone || '').trim(),
+  };
+}
+
+function isVerifiedPublicSafeZone(safeZone) {
+  const normalized = normalizeSafeZone(safeZone);
+  return Boolean(
+    normalized.name &&
+    normalized.address &&
+    normalized.capacity > 0 &&
+    normalized.name.length > 1 &&
+    !TEST_SAFE_ZONE_NAME_PATTERN.test(normalized.name)
+  );
+}
+
+function getPublicSafeZones() {
+  return Array.isArray(db.safeZones)
+    ? db.safeZones.map(normalizeSafeZone).filter(isVerifiedPublicSafeZone)
+    : [];
+}
+
 function safeUser(user) {
   if (!user) return null;
   const safe = { ...user };
@@ -315,7 +600,7 @@ function sanitizeDbForUser(user) {
     floodWarnings: Array.isArray(db.floodWarnings)
       ? db.floodWarnings.filter(w => w.status === 'PUBLISHED')
       : [],
-    safeZones: db.safeZones,
+    safeZones: getPublicSafeZones(),
     dams: db.dams,
   };
 
@@ -683,6 +968,32 @@ async function ensureRelationalTables() {
     ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS area_id TEXT;
     ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS note TEXT;
     ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS assigned_team_name TEXT;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS has_elderly BOOLEAN DEFAULT FALSE;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS has_children BOOLEAN DEFAULT FALSE;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS has_disabled BOOLEAN DEFAULT FALSE;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS has_medical_case BOOLEAN DEFAULT FALSE;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS need_food_water BOOLEAN DEFAULT FALSE;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS sos_mode BOOLEAN DEFAULT FALSE;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS requester_type TEXT DEFAULT 'SELF';
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS reporter_name TEXT;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS reporter_phone TEXT;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS reporter_relationship TEXT;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS reporter_latitude DOUBLE PRECISION;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS reporter_longitude DOUBLE PRECISION;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS victim_name TEXT;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS victim_phone TEXT;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS victim_area_id TEXT;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS victim_area_name TEXT;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS victim_address_detail TEXT;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS victim_latitude DOUBLE PRECISION;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS victim_longitude DOUBLE PRECISION;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS verification_status TEXT DEFAULT 'VERIFIED';
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS priority_score INTEGER DEFAULT 0;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS duplicate_group_id TEXT;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS cluster_id TEXT;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS nearby_active_mission_id TEXT;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS nearby_active_team_name TEXT;
+    ALTER TABLE rescue_requests ADD COLUMN IF NOT EXISTS coordination_note TEXT;
     CREATE INDEX IF NOT EXISTS citizen_profiles_user_id_idx ON citizen_profiles(user_id);
     CREATE INDEX IF NOT EXISTS rescue_requests_created_by_user_id_idx ON rescue_requests(created_by_user_id);
   `);
@@ -1362,10 +1673,9 @@ app.delete('/api/warnings/:id', requireRoles(ADMIN_ROLES), (req, res) => {
 // 5. RESCUE REQUESTS & MISSIONS
 app.post('/api/rescue-requests', publicWriteLimiter, authenticateOptional, async (req, res) => {
   try {
-    const data = pickAllowed(req.body, RESCUE_REQUEST_PUBLIC_FIELDS);
-    if (req.user) {
-      data.user_id = req.user.id;
-    }
+    const data = enrichRescueRequestCoordination(
+      normalizeRescueRequestInput(pickAllowed(req.body, RESCUE_REQUEST_PUBLIC_FIELDS), req.user)
+    );
 
     if (!data.full_name || !data.area_id || !data.address_detail) {
       return res.status(400).json({ error: 'Missing required rescue request fields' });
@@ -1379,9 +1689,18 @@ app.post('/api/rescue-requests', publicWriteLimiter, authenticateOptional, async
         `INSERT INTO rescue_requests (
            id, full_name, phone, area_id, area_name, address_detail, description, note,
            number_of_people, emergency_level, latitude, longitude, status, assigned_team_id,
-           assigned_team_name, created_by_user_id, accepted_at, completed_at, created_at, updated_at
+           assigned_team_name, created_by_user_id, has_elderly, has_children, has_disabled,
+           has_medical_case, need_food_water, sos_mode, requester_type, reporter_name,
+           reporter_phone, reporter_relationship, reporter_latitude, reporter_longitude,
+           victim_name, victim_phone, victim_area_id, victim_area_name, victim_address_detail,
+           victim_latitude, victim_longitude, verification_status, priority_score,
+           duplicate_group_id, cluster_id, nearby_active_mission_id, nearby_active_team_name,
+           coordination_note, accepted_at, completed_at, created_at, updated_at
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::"AlertLevel", $11, $12, 'PENDING', NULL, NULL, $13, NULL, NULL, NOW(), NOW())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::"AlertLevel", $11, $12, 'PENDING', NULL, NULL, $13,
+           $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25,
+           $26, $27, $28, $29, $30, $31, $32, $33, $34, $35, $36, $37,
+           $38, $39, NULL, NULL, NOW(), NOW())
          RETURNING *, status::text, emergency_level::text`,
         [
           requestId,
@@ -1397,6 +1716,32 @@ app.post('/api/rescue-requests', publicWriteLimiter, authenticateOptional, async
           Number.isFinite(Number(data.latitude)) ? Number(data.latitude) : null,
           Number.isFinite(Number(data.longitude)) ? Number(data.longitude) : null,
           data.user_id || null,
+          data.has_elderly,
+          data.has_children,
+          data.has_disabled,
+          data.has_medical_case,
+          data.need_food_water,
+          data.sos_mode,
+          data.requester_type,
+          data.reporter_name || null,
+          data.reporter_phone || null,
+          data.reporter_relationship || null,
+          data.reporter_latitude,
+          data.reporter_longitude,
+          data.victim_name || null,
+          data.victim_phone || null,
+          data.victim_area_id || null,
+          data.victim_area_name || null,
+          data.victim_address_detail || null,
+          data.victim_latitude,
+          data.victim_longitude,
+          data.verification_status,
+          data.priority_score,
+          data.duplicate_group_id,
+          data.cluster_id,
+          data.nearby_active_mission_id,
+          data.nearby_active_team_name,
+          data.coordination_note,
         ]
       );
       const request = {
@@ -1404,6 +1749,7 @@ app.post('/api/rescue-requests', publicWriteLimiter, authenticateOptional, async
         vector_embedding: getEmbedding(textToEmbed),
       };
       db.rescueRequests.unshift(request);
+      saveDb();
       broadcastDbUpdate('rescue-request:created', ['rescueRequests']);
       return res.status(201).json(request);
     }
@@ -1449,22 +1795,41 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), (req, res
   if (reqIdx === -1) return res.status(404).json({ error: 'Request not found' });
 
   const request = db.rescueRequests[reqIdx];
+  const team = db.rescueTeams.find(t => t.id === teamId);
+  const resolvedTeamName = teamName || team?.team_name || team?.name || 'Doi cuu ho';
+  const assignmentWarnings = getAssignmentWarnings(request, team);
   request.status = 'ASSIGNED';
   request.assigned_team_id = teamId;
-  request.assigned_team_name = teamName;
+  request.assigned_team_name = resolvedTeamName;
   request.accepted_at = new Date().toISOString();
+  request.updated_at = new Date().toISOString();
+  if (pool) {
+    pool.query(
+      `UPDATE rescue_requests
+       SET status = 'ASSIGNED'::"RescueRequestStatus",
+           assigned_team_id = $1,
+           assigned_team_name = $2,
+           accepted_at = $3,
+           updated_at = NOW()
+       WHERE id = $4`,
+      [teamId || null, resolvedTeamName, toPgTimestamp(request.accepted_at), id]
+    ).catch(err => console.error('Failed to persist rescue assignment:', err));
+  }
 
   // Create corresponding mission
   const mission = {
     id: createId('rm'),
     rescue_request_id: id,
     rescue_team_id: teamId,
-    team_name: teamName,
-    victim_name: request.full_name,
-    victim_phone: request.phone,
-    victim_latitude: request.latitude,
-    victim_longitude: request.longitude,
-    victim_address: request.address_detail,
+    team_name: resolvedTeamName,
+    mission_type: request.nearby_active_mission_id ? 'SUPPORT_OR_CLUSTER' : 'PRIMARY',
+    cluster_id: request.cluster_id || null,
+    linked_mission_id: request.nearby_active_mission_id || null,
+    victim_name: request.victim_name || request.full_name,
+    victim_phone: request.victim_phone || request.phone,
+    victim_latitude: request.victim_latitude ?? request.latitude,
+    victim_longitude: request.victim_longitude ?? request.longitude,
+    victim_address: request.victim_address_detail || request.address_detail,
     current_rescuer_latitude: null,
     current_rescuer_longitude: null,
     checkin_radius_meters: 100,
@@ -1484,12 +1849,14 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), (req, res
     destination_safe_zone_id: null,
     completed_at: null,
     completion_note: '',
-    area_id: request.area_id,
-    area_name: request.area_name,
+    area_id: request.victim_area_id || request.area_id,
+    area_name: request.victim_area_name || request.area_name,
+    assignment_warnings: assignmentWarnings,
     created_at: new Date().toISOString()
   };
   
   db.rescueMissions.unshift(mission);
+  syncTeamLoad(teamId);
 
   // Add activity log
   const log = {
@@ -1502,6 +1869,9 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), (req, res
     note: `Phân công ${teamName}`,
     created_at: new Date().toISOString()
   };
+  log.user_name = currentUser?.full_name || 'He thong';
+  log.action = 'Phan cong doi cuu ho';
+  log.note = `Phan cong ${resolvedTeamName}${assignmentWarnings.length ? ` - ${assignmentWarnings.length} canh bao dieu phoi` : ''}`;
   db.activityLogs.unshift(log);
 
   // Add notification for team
@@ -1515,11 +1885,27 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), (req, res
     created_at: new Date().toISOString(),
     related_id: mission.id
   };
+  notif.user_id = team?.leader_user_id || team?.leader_id || 'user-rescue-1';
+  notif.title = 'Nhiem vu moi!';
+  notif.message = `Ban duoc phan cong cuu ho ${request.victim_name || request.full_name}`;
   db.notifications.unshift(notif);
 
+  if (request.user_id || request.created_by_user_id) {
+    db.notifications.unshift({
+      id: createId('notif'),
+      user_id: request.user_id || request.created_by_user_id,
+      title: 'Da co doi dang den',
+      message: `${resolvedTeamName} da nhan yeu cau cuu ho. Hay giu dien thoai de doi lien he.`,
+      type: 'RESCUE_REQUEST_ASSIGNED',
+      is_read: false,
+      created_at: new Date().toISOString(),
+      related_id: request.id,
+    });
+  }
+
   saveDb();
-  broadcastDbUpdate('rescue-request:assigned', ['rescueRequests', 'rescueMissions', 'activityLogs', 'notifications']);
-  res.json({ success: true, request, mission });
+  broadcastDbUpdate('rescue-request:assigned', ['rescueRequests', 'rescueMissions', 'rescueTeams', 'activityLogs', 'notifications']);
+  res.json({ success: true, request, mission, assignment_warnings: assignmentWarnings, rescueTeams: db.rescueTeams });
 });
 
 // 6. UPDATE MISSION STATUS (and link request status)
@@ -1557,11 +1943,22 @@ app.post('/api/missions/:id/status', requireRoles([...ADMIN_ROLES, ...RESCUE_ROL
     if (newStatus === 'RESCUED' || newStatus === 'TRANSFERRED_SAFEZONE') {
       db.rescueRequests[reqIdx].completed_at = new Date().toISOString();
     }
+    if (pool) {
+      pool.query(
+        `UPDATE rescue_requests
+         SET status = $1::"RescueRequestStatus",
+             completed_at = CASE WHEN $1::text IN ('RESCUED', 'TRANSFERRED_SAFEZONE') THEN NOW() ELSE completed_at END,
+             updated_at = NOW()
+         WHERE id = $2`,
+        [newStatus, mission.rescue_request_id]
+      ).catch(err => console.error('Failed to persist mission status:', err));
+    }
   }
+  syncTeamLoad(mission.rescue_team_id);
 
   saveDb();
-  broadcastDbUpdate('mission:status-updated', ['rescueMissions', 'rescueRequests', 'missionStatusLogs']);
-  res.json({ success: true, mission: db.rescueMissions[missionIdx] });
+  broadcastDbUpdate('mission:status-updated', ['rescueMissions', 'rescueRequests', 'rescueTeams', 'missionStatusLogs']);
+  res.json({ success: true, mission: db.rescueMissions[missionIdx], rescueTeams: db.rescueTeams });
 });
 
 // 7. RESCUE TEAMS CRUD

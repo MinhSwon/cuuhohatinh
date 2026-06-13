@@ -1,18 +1,19 @@
 ﻿import { useData } from '../../contexts/DataContext';
-import { useAuth } from '../../contexts/AuthContext';
-import { StatusBadge, LevelBadge } from '../../components/common/StatusBadge';
-import { Building2, MapPin, Phone } from 'lucide-react';
+import { StatusBadge } from '../../components/common/StatusBadge';
+import { Building2, Phone } from 'lucide-react';
+import { getPublicSafeZones, getSafeZoneOccupancy } from '../../utils/safeZones';
 
 export default function CitizenSafeZones() {
   const { safeZones } = useData();
-  const available = safeZones.filter(s => s.status === 'AVAILABLE');
+  const publicSafeZones = getPublicSafeZones(safeZones);
+  const available = publicSafeZones.filter(s => s.status === 'AVAILABLE');
 
   return (
     <div className="page-container">
       <div className="page-header">
         <div><h1 className="page-title"><Building2 size={22} color="#10b981" /> Điểm sơ tán</h1><p className="page-subtitle">Tìm điểm sơ tán an toàn gần bạn</p></div>
         <span style={{ background: '#f0fdf4', color: '#15803d', borderRadius: 8, padding: '0.375rem 0.875rem', fontSize: '0.82rem', fontWeight: 600 }}>
-          🏫 {available.length}/{safeZones.length} điểm còn chỗ
+          🏫 {available.length}/{publicSafeZones.length} điểm còn chỗ
         </span>
       </div>
 
@@ -23,9 +24,9 @@ export default function CitizenSafeZones() {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
-        {safeZones.map(sz => {
-          const occupancy = Math.round((sz.current_people / sz.capacity) * 100);
-          const barColor = occupancy >= 95 ? '#ef4444' : occupancy >= 75 ? '#f59e0b' : '#10b981';
+        {publicSafeZones.map(sz => {
+          const occupancy = getSafeZoneOccupancy(sz);
+          const barColor = occupancy.percent >= 95 ? '#ef4444' : occupancy.percent >= 75 ? '#f59e0b' : '#10b981';
           return (
             <div key={sz.id} className="card">
               <div style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between' }}>
@@ -38,11 +39,11 @@ export default function CitizenSafeZones() {
               <div style={{ padding: '1rem' }}>
                 <div style={{ marginBottom: '0.875rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', marginBottom: 6 }}>
-                    <span style={{ color: '#64748b' }}>Đang có: {sz.current_people}/{sz.capacity} người</span>
-                    <span style={{ fontWeight: 700, color: barColor }}>{occupancy}%</span>
+                    <span style={{ color: '#64748b' }}>Đang có: {occupancy.current_people}/{occupancy.capacity} người</span>
+                    <span style={{ fontWeight: 700, color: barColor }}>{occupancy.percent}%</span>
                   </div>
                   <div style={{ height: 10, background: '#f1f5f9', borderRadius: 5 }}>
-                    <div style={{ height: '100%', width: `${Math.min(occupancy, 100)}%`, background: barColor, borderRadius: 5 }} />
+                    <div style={{ height: '100%', width: `${occupancy.percent}%`, background: barColor, borderRadius: 5 }} />
                   </div>
                 </div>
                 <div style={{ fontSize: '0.78rem', color: '#64748b', marginBottom: '0.5rem' }}>📍 {sz.address}</div>
@@ -53,7 +54,7 @@ export default function CitizenSafeZones() {
                 )}
                 {sz.status === 'AVAILABLE' && (
                   <div style={{ marginTop: '0.75rem', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, padding: '0.625rem', fontSize: '0.75rem', color: '#15803d' }}>
-                    ✅ Còn {sz.capacity - sz.current_people} chỗ trống
+                    ✅ Còn {occupancy.availableSlots} chỗ trống
                   </div>
                 )}
               </div>

@@ -1,13 +1,15 @@
 ﻿import { Link } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
-import { AlertTriangle, Phone, MapPin, Shield, Users, Building2, Bell, Navigation } from 'lucide-react';
+import { AlertTriangle, Phone, Shield, Building2, Bell, Navigation } from 'lucide-react';
 import { LevelBadge } from '../../components/common/StatusBadge';
+import { getPublicSafeZones, getSafeZoneOccupancy } from '../../utils/safeZones';
 
 export default function HomePage() {
   const { floodWarnings, safeZones, rescueRequests } = useData();
   const activeWarnings = floodWarnings.filter(w => w.status === 'PUBLISHED');
   const emergencyWarnings = activeWarnings.filter(w => w.level === 'EMERGENCY');
   const hasEmergency = emergencyWarnings.length > 0;
+  const publicSafeZones = getPublicSafeZones(safeZones);
 
   const EMERGENCY_CONTACTS = [
     { name: 'Ban Chỉ huy PCTT Hương Khê', phone: '0693 851 000', icon: Shield },
@@ -128,7 +130,7 @@ export default function HomePage() {
                 { icon: '🌊', label: 'Cảnh báo đang hoạt động', value: activeWarnings.length, dim: '#a04040' },
                 { icon: '🆘', label: 'Yêu cầu cứu hộ', value: rescueRequests.length, dim: '#a0731a' },
                 { icon: '🛡️', label: 'Đội cứu hộ sẵn sàng', value: 3, dim: '#3a6b4a' },
-                { icon: '🏫', label: 'Điểm sơ tán mở', value: safeZones.filter(s => s.status === 'AVAILABLE').length, dim: '#4a6fa5' },
+                { icon: '🏫', label: 'Điểm sơ tán mở', value: publicSafeZones.filter(s => s.status === 'AVAILABLE').length, dim: '#4a6fa5' },
               ].map((s, i) => (
                 <div key={i} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '0.875rem', textAlign: 'center' }}>
                   <div style={{ fontSize: '1.5rem', marginBottom: '0.375rem' }}>{s.icon}</div>
@@ -182,9 +184,9 @@ export default function HomePage() {
               <Building2 size={17} color="#3a6b4a" /> Điểm sơ tán
             </h2>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {safeZones.map(sz => {
-                const pct = Math.round((sz.current_people / sz.capacity) * 100);
-                const barColor = pct >= 90 ? '#a04040' : pct >= 70 ? '#a0731a' : '#3a6b4a';
+              {publicSafeZones.map(sz => {
+                const occupancy = getSafeZoneOccupancy(sz);
+                const barColor = occupancy.percent >= 90 ? '#a04040' : occupancy.percent >= 70 ? '#a0731a' : '#3a6b4a';
                 return (
                   <div key={sz.id} className="card" style={{ padding: '0.875rem 1rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
@@ -195,10 +197,10 @@ export default function HomePage() {
                       <span className={`badge badge-${sz.status}`}>{sz.status === 'FULL' ? 'Đã đầy' : 'Còn chỗ'}</span>
                     </div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.68rem', color: '#9e9282', marginBottom: 5 }}>
-                      <span>{sz.current_people}/{sz.capacity} người</span><span>{pct}%</span>
+                      <span>{occupancy.current_people}/{occupancy.capacity} người</span><span>{occupancy.percent}%</span>
                     </div>
                     <div style={{ height: 4, background: '#ede8e0', borderRadius: 3 }}>
-                      <div style={{ height: '100%', width: `${Math.min(pct, 100)}%`, background: barColor, borderRadius: 3, transition: 'width 0.4s' }} />
+                      <div style={{ height: '100%', width: `${occupancy.percent}%`, background: barColor, borderRadius: 3, transition: 'width 0.4s' }} />
                     </div>
                   </div>
                 );

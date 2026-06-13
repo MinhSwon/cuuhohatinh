@@ -8,7 +8,9 @@ import { AREAS } from '../../data/publicData';
 function TeamForm({ initial, onSave, onClose }) {
   const [form, setForm] = useState(initial || {
     team_name: '', area_id: '', leader_name: '', phone: '',
-    vehicle_type: '', member_count: 5, status: 'AVAILABLE', note: ''
+    vehicle_type: '', member_count: 5, max_active_missions: 2,
+    max_people_per_trip: 6, vehicle_capacity: 6, service_radius_km: 10,
+    status: 'AVAILABLE', note: ''
   });
   return (
     <form onSubmit={e => { e.preventDefault(); onSave(form); }}>
@@ -41,6 +43,18 @@ function TeamForm({ initial, onSave, onClose }) {
           <input type="number" min="1" className="form-input" value={form.member_count} onChange={e => setForm(f => ({ ...f, member_count: parseInt(e.target.value) }))} />
         </div>
         <div>
+          <label className="form-label">Nhiem vu dong thoi</label>
+          <input type="number" min="1" className="form-input" value={form.max_active_missions || 2} onChange={e => setForm(f => ({ ...f, max_active_missions: parseInt(e.target.value) }))} />
+        </div>
+        <div>
+          <label className="form-label">Suc cho moi chuyen</label>
+          <input type="number" min="1" className="form-input" value={form.max_people_per_trip || form.vehicle_capacity || 1} onChange={e => setForm(f => ({ ...f, max_people_per_trip: parseInt(e.target.value), vehicle_capacity: parseInt(e.target.value) }))} />
+        </div>
+        <div>
+          <label className="form-label">Ban kinh phuc vu (km)</label>
+          <input type="number" min="1" className="form-input" value={form.service_radius_km || 10} onChange={e => setForm(f => ({ ...f, service_radius_km: parseInt(e.target.value) }))} />
+        </div>
+        <div>
           <label className="form-label">Trạng thái</label>
           <select className="form-input form-select" value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
             <option value="AVAILABLE">Sẵn sàng</option>
@@ -71,7 +85,9 @@ export default function RescueTeams() {
 
   const filtered = filterStatus ? rescueTeams.filter(t => t.status === filterStatus) : rescueTeams;
 
+  const activeStatuses = ['ASSIGNED','ACCEPTED','MOVING','NEAR_VICTIM','ARRIVED_CONFIRMED','RESCUING','NEED_SUPPORT'];
   const getMissionCount = (teamId) => rescueMissions.filter(m => m.rescue_team_id === teamId).length;
+  const getActiveMissionCount = (teamId) => rescueMissions.filter(m => m.rescue_team_id === teamId && activeStatuses.includes(m.status)).length;
   const getSuccessCount = (teamId) => rescueMissions.filter(m => m.rescue_team_id === teamId && ['RESCUED', 'TRANSFERRED_SAFEZONE'].includes(m.status)).length;
 
   const handleSave = (form) => {
@@ -118,6 +134,7 @@ export default function RescueTeams() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
         {filtered.map(team => {
           const missions = getMissionCount(team.id);
+          const activeMissions = getActiveMissionCount(team.id);
           const success = getSuccessCount(team.id);
           return (
             <div key={team.id} className="card">
@@ -146,6 +163,10 @@ export default function RescueTeams() {
                     <span style={{ color: '#94a3b8', fontSize: '0.68rem' }}>Phương tiện</span>
                     <div style={{ fontWeight: 600 }}>🚤 {team.vehicle_type || '—'}</div>
                   </div>
+                </div>
+
+                <div style={{ background: activeMissions >= (team.max_active_missions || 2) ? '#fef2f2' : '#eff6ff', borderRadius: 8, padding: '0.625rem', marginBottom: '1rem', fontSize: '0.78rem', color: activeMissions >= (team.max_active_missions || 2) ? '#b91c1c' : '#1d4ed8', fontWeight: 700 }}>
+                  Tai dieu phoi: {activeMissions}/{team.max_active_missions || 2} nhiem vu dang xu ly · Suc cho: {team.max_people_per_trip || team.vehicle_capacity || 'chua cau hinh'} nguoi/chuyen
                 </div>
 
                 {/* Performance */}

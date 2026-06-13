@@ -13,6 +13,13 @@ export const STATUS_LABELS = {
   UNREACHABLE: 'Không liên lạc được',
   NEED_SUPPORT: 'Cần hỗ trợ thêm',
   CANCELLED: 'Đã hủy',
+  NEEDS_VERIFICATION: 'Cần xác minh',
+  VERIFIED: 'Đã xác minh',
+  DUPLICATE: 'Trùng yêu cầu',
+  CLUSTERED: 'Đã gom cụm',
+  SUPPORT_ASSIGNED: 'Đã điều đội hỗ trợ',
+  SUPPORT_OR_CLUSTER: 'Hỗ trợ/cụm',
+  PRIMARY: 'Nhiệm vụ chính',
   // Warning statuses
   DRAFT: 'Bản nháp',
   PUBLISHED: 'Đã công bố',

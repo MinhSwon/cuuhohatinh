@@ -1,6 +1,13 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import axios from 'axios';
 import { AREAS } from '../data/publicData';
+import {
+  getAssignmentWarnings,
+  getRequestAddress,
+  getRequestName,
+  getRequestPhone,
+  getTeamMaxActiveMissions,
+} from '../utils/rescueCoordination';
 
 const DataContext = createContext(null);
 const shouldUseOfflineFallback = (err) => !err.response;
@@ -224,17 +231,20 @@ export function DataProvider({ children }) {
     }
   }, []);
 
-  const assignTeamToRequest = useCallback(async (requestId, teamId, teamName, currentUser) => {
+  const assignTeamToRequest = useCallback(async (requestId, teamId, teamName, currentUser, options = {}) => {
     try {
-      const res = await axios.post(`/api/rescue-requests/${requestId}/assign`, { teamId, teamName, currentUser });
-      const { request, mission } = res.data;
+      const res = await axios.post(`/api/rescue-requests/${requestId}/assign`, { teamId, teamName, currentUser, ...options });
+      const { request, mission, rescueTeams: updatedTeams } = res.data;
       setRescueRequests(prev => prev.map(r => r.id === requestId ? request : r));
       setRescueMissions(prev => [mission, ...prev]);
+      if (updatedTeams) setRescueTeams(updatedTeams);
       
       // Update logs and notifications locally from backend sync
       const dbRes = await axios.get('/api/db');
       setActivityLogs(dbRes.data.activityLogs || []);
       setNotifications(dbRes.data.notifications || []);
+      if (dbRes.data.rescueTeams) setRescueTeams(dbRes.data.rescueTeams);
+      return res.data;
     } catch (err) {
       if (!shouldUseOfflineFallback(err)) throw err;
       setRescueRequests(prev => prev.map(r => r.id === requestId
@@ -243,16 +253,21 @@ export function DataProvider({ children }) {
       ));
       const request = rescueRequests.find(r => r.id === requestId);
       if (request) {
+        const team = rescueTeams.find(t => t.id === teamId);
+        const assignmentWarnings = getAssignmentWarnings(request, rescueMissions, rescueTeams, teamId);
         const mission = {
           id: `rm-${Date.now()}`,
           rescue_request_id: requestId,
           rescue_team_id: teamId,
           team_name: teamName,
-          victim_name: request.full_name,
-          victim_phone: request.phone,
-          victim_latitude: request.latitude,
-          victim_longitude: request.longitude,
-          victim_address: request.address_detail,
+          mission_type: request.nearby_active_mission_id ? 'SUPPORT_OR_CLUSTER' : 'PRIMARY',
+          cluster_id: request.cluster_id || null,
+          linked_mission_id: request.nearby_active_mission_id || null,
+          victim_name: getRequestName(request),
+          victim_phone: getRequestPhone(request),
+          victim_latitude: request.victim_latitude ?? request.latitude,
+          victim_longitude: request.victim_longitude ?? request.longitude,
+          victim_address: getRequestAddress(request),
           current_rescuer_latitude: null,
           current_rescuer_longitude: null,
           checkin_radius_meters: 100,
@@ -272,16 +287,29 @@ export function DataProvider({ children }) {
           destination_safe_zone_id: null,
           completed_at: null,
           completion_note: '',
-          area_id: request.area_id,
-          area_name: request.area_name,
+          area_id: request.victim_area_id || request.area_id,
+          area_name: request.victim_area_name || request.area_name,
+          assignment_warnings: assignmentWarnings,
           created_at: new Date().toISOString(),
         };
         setRescueMissions(prev => [mission, ...prev]);
+        setRescueTeams(prev => prev.map(item => {
+          if (item.id !== teamId) return item;
+          const currentActive = Number(item.current_active_missions || 0) + 1;
+          const maxActive = getTeamMaxActiveMissions(item);
+          return {
+            ...item,
+            current_active_missions: currentActive,
+            status: currentActive >= maxActive ? 'BUSY' : item.status,
+          };
+        }));
         addLog(currentUser?.id, currentUser?.full_name, 'Phân công đội cứu hộ', 'rescue_requests', requestId, `Phân công ${teamName}`);
         addNotification('user-rescue-1', 'Nhiệm vụ mới!', `Bạn được phân công cứu hộ ${request.full_name}`, 'MISSION_ASSIGNED', mission.id);
+        return { success: true, request, mission, assignment_warnings: assignmentWarnings, offline: true };
       }
+      return { success: false, offline: true };
     }
-  }, [rescueRequests, addLog, addNotification]);
+  }, [rescueRequests, rescueMissions, rescueTeams, addLog, addNotification]);
 
   // Mission updates
   const updateMissionStatus = useCallback(async (missionId, newStatus, extraData = {}, changedByType = 'RESCUE_TEAM', changedByUser = null, note = '') => {
@@ -291,11 +319,13 @@ export function DataProvider({ children }) {
       });
       const updatedMission = res.data.mission;
       setRescueMissions(prev => prev.map(m => m.id === missionId ? updatedMission : m));
+      if (res.data.rescueTeams) setRescueTeams(res.data.rescueTeams);
       
       // Load updated request status and status logs from backend
       const dbRes = await axios.get('/api/db');
       if (dbRes.data.rescueRequests) setRescueRequests(dbRes.data.rescueRequests);
       if (dbRes.data.missionStatusLogs) setMissionStatusLogs(dbRes.data.missionStatusLogs);
+      if (dbRes.data.rescueTeams) setRescueTeams(dbRes.data.rescueTeams);
     } catch (err) {
       if (!shouldUseOfflineFallback(err)) throw err;
       setRescueMissions(prev => prev.map(m => {

@@ -5,13 +5,23 @@ import { useToast } from '../../contexts/ToastContext';
 import { Eye, UserCheck, X, Filter, ChevronDown, AlertTriangle, Phone, MapPin, Users } from 'lucide-react';
 import { StatusBadge, LevelBadge } from '../../components/common/StatusBadge';
 import { AREAS } from '../../data/publicData';
+import {
+  getAssignmentWarnings,
+  getRequestAddress,
+  getRequestName,
+  getRequestPhone,
+  getTeamRecommendations,
+  isNeedsVerification,
+} from '../../utils/rescueCoordination';
 
 const URGENCY_LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'EMERGENCY'];
 const STATUS_FILTER_OPTIONS = ['PENDING', 'ASSIGNED', 'ACCEPTED', 'MOVING', 'NEAR_VICTIM', 'ARRIVED_CONFIRMED', 'RESCUING', 'RESCUED', 'UNREACHABLE', 'NEED_SUPPORT', 'CANCELLED'];
 
-function AssignModal({ request, teams, onAssign, onClose }) {
+function AssignModal({ request, teams, missions = [], onAssign, onClose }) {
   const [selectedTeam, setSelectedTeam] = useState('');
-  const availableTeams = teams.filter(t => t.status === 'AVAILABLE');
+  const availableTeams = teams.filter(t => !['OFFLINE', 'MAINTENANCE', 'INACTIVE'].includes(t.status));
+  const recommendations = getTeamRecommendations(teams, request, missions);
+  const warnings = getAssignmentWarnings(request, missions, teams, selectedTeam);
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
@@ -22,7 +32,7 @@ function AssignModal({ request, teams, onAssign, onClose }) {
         </div>
         <div style={{ padding: '1.5rem' }}>
           <div style={{ background: '#f8fafc', borderRadius: 10, padding: '0.875rem', marginBottom: '1.25rem' }}>
-            <div style={{ fontWeight: 600, fontSize: '0.88rem', marginBottom: '0.5rem' }}>{request.full_name}</div>
+            <div style={{ fontWeight: 600, fontSize: '0.88rem', marginBottom: '0.5rem' }}>{getRequestName(request)}</div>
             <div style={{ fontSize: '0.78rem', color: '#64748b' }}>📍 {request.address_detail}</div>
             <div style={{ fontSize: '0.78rem', color: '#64748b' }}>📞 {request.phone}</div>
             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
@@ -36,33 +46,53 @@ function AssignModal({ request, teams, onAssign, onClose }) {
           </div>
 
           <label className="form-label">Chọn đội cứu hộ *</label>
+          {(request.requester_type !== 'SELF' || isNeedsVerification(request) || warnings.length > 0) && (
+            <div style={{ display: 'grid', gap: '0.5rem', marginBottom: '1rem' }}>
+              {request.requester_type !== 'SELF' && (
+                <div style={{ padding: '0.65rem', borderRadius: 8, background: '#fffbeb', color: '#92400e', fontSize: '0.72rem' }}>
+                  Bao ho: {request.reporter_name || 'Nguoi bao'} - {request.reporter_phone || 'chua co SDT'}
+                </div>
+              )}
+              {warnings.map((warning, index) => (
+                <div key={`${warning.type}-${index}`} style={{ padding: '0.65rem', borderRadius: 8, background: '#fef2f2', color: '#991b1b', fontSize: '0.72rem', fontWeight: 700 }}>
+                  {warning.message}
+                </div>
+              ))}
+            </div>
+          )}
+
           {availableTeams.length === 0 ? (
             <div style={{ padding: '1rem', background: '#fef2f2', borderRadius: 8, color: '#dc2626', fontSize: '0.82rem' }}>
               ⚠️ Không có đội cứu hộ nào sẵn sàng
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {teams.map(team => (
+              {recommendations.map(({ team, activeCount, maxActive, distanceLabel, overCapacity, unavailable }, index) => (
                 <label key={team.id} style={{
                   display: 'flex', alignItems: 'center', gap: '0.75rem',
                   padding: '0.75rem', borderRadius: 8,
                   border: `2px solid ${selectedTeam === team.id ? '#3b82f6' : '#e2e8f0'}`,
                   background: selectedTeam === team.id ? '#eff6ff' : 'white',
-                  cursor: team.status !== 'AVAILABLE' ? 'not-allowed' : 'pointer',
-                  opacity: team.status !== 'AVAILABLE' ? 0.5 : 1,
+                  cursor: unavailable ? 'not-allowed' : 'pointer',
+                  opacity: unavailable ? 0.5 : 1,
                 }}>
                   <input
                     type="radio"
                     name="team"
                     value={team.id}
-                    disabled={team.status !== 'AVAILABLE'}
+                    disabled={unavailable}
                     checked={selectedTeam === team.id}
                     onChange={e => setSelectedTeam(e.target.value)}
                     style={{ accentColor: '#2563eb' }}
                   />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: '0.82rem' }}>{team.team_name}</div>
+                    <div style={{ fontWeight: 600, fontSize: '0.82rem' }}>
+                      {team.team_name} {index === 0 && <span style={{ color: '#16a34a', fontSize: '0.65rem' }}>Goi y</span>}
+                    </div>
                     <div style={{ fontSize: '0.7rem', color: '#64748b' }}>👤 {team.leader_name} · 📞 {team.phone} · {team.member_count} thành viên</div>
+                    <div style={{ fontSize: '0.68rem', color: overCapacity ? '#dc2626' : '#64748b', marginTop: 2 }}>
+                      Tai hien tai: {activeCount}/{maxActive} nhiem vu dang xu ly - {distanceLabel}
+                    </div>
                   </div>
                   <StatusBadge status={team.status} />
                 </label>
@@ -72,7 +102,7 @@ function AssignModal({ request, teams, onAssign, onClose }) {
 
           <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', justifyContent: 'flex-end' }}>
             <button className="btn btn-secondary" onClick={onClose}>Hủy</button>
-            <button className="btn btn-primary" disabled={!selectedTeam} onClick={() => onAssign(selectedTeam)}>
+            <button className="btn btn-primary" disabled={!selectedTeam} onClick={() => onAssign(selectedTeam, warnings)}>
               <UserCheck size={16} /> Xác nhận phân công
             </button>
           </div>
@@ -152,7 +182,7 @@ function DetailModal({ request, onClose }) {
 }
 
 export default function RescueRequests() {
-  const { rescueRequests, rescueTeams, assignTeamToRequest, updateRescueRequest, searchSemantics } = useData();
+  const { rescueRequests, rescueTeams, rescueMissions, assignTeamToRequest, updateRescueRequest, searchSemantics } = useData();
   const { currentUser } = useAuth();
   const toast = useToast();
   const [filterArea, setFilterArea] = useState('');
@@ -200,9 +230,16 @@ export default function RescueRequests() {
 
   const sosCount = rescueRequests.filter(r => r.sos_mode && r.status === 'PENDING').length;
 
-  const handleAssign = (teamId) => {
+  const handleAssign = async (teamId, warnings = []) => {
     const team = rescueTeams.find(t => t.id === teamId);
-    assignTeamToRequest(assignModal.id, teamId, team?.team_name, currentUser);
+    if (warnings.length > 0) {
+      const ok = window.confirm(`Co ${warnings.length} canh bao dieu phoi. Ban van muon phan cong ${team?.team_name}?`);
+      if (!ok) return;
+    }
+    const result = await assignTeamToRequest(assignModal.id, teamId, team?.team_name, currentUser);
+    if (result?.assignment_warnings?.length) {
+      toast.warning(`Kem ${result.assignment_warnings.length} canh bao dieu phoi.`);
+    }
     toast.success(`Đã phân công ${team?.team_name} cho ${assignModal.full_name}!`);
     setAssignModal(null);
   };
@@ -239,6 +276,8 @@ export default function RescueRequests() {
           { label: 'Đang xử lý', count: rescueRequests.filter(r => ['ASSIGNED','ACCEPTED','MOVING','NEAR_VICTIM','ARRIVED_CONFIRMED','RESCUING'].includes(r.status)).length, color: '#3b82f6', bg: '#eff6ff' },
           { label: 'Cứu thành công', count: rescueRequests.filter(r => ['RESCUED','TRANSFERRED_SAFEZONE'].includes(r.status)).length, color: '#10b981', bg: '#f0fdf4' },
           { label: '🆘 SOS chờ xử lý', count: sosCount, color: '#dc2626', bg: '#fef2f2' },
+          { label: 'Can xac minh', count: rescueRequests.filter(isNeedsVerification).length, color: '#d97706', bg: '#fffbeb' },
+          { label: 'Gan nhiem vu khac', count: rescueRequests.filter(r => r.nearby_active_mission_id || r.duplicate_group_id).length, color: '#7c3aed', bg: '#f5f3ff' },
         ].map(s => (
           <div key={s.label} style={{ background: s.bg, border: `1px solid ${s.color}20`, borderRadius: 10, padding: '0.75rem', textAlign: 'center' }}>
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: s.color }}>{s.count}</div>
@@ -329,7 +368,7 @@ export default function RescueRequests() {
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: 2 }}>
                       {r.sos_mode && <span style={{ background: '#fef2f2', color: '#dc2626', borderRadius: 4, padding: '1px 5px', fontSize: '0.62rem', fontWeight: 800, border: '1px solid #fecaca' }}>🆘 SOS</span>}
-                      <span style={{ fontWeight: 600, fontSize: '0.82rem', color: '#0f172a' }}>{r.full_name}</span>
+                      <span style={{ fontWeight: 600, fontSize: '0.82rem', color: '#0f172a' }}>{getRequestName(r)}</span>
                       {isSemanticActive && r.similarity !== undefined && (
                         <span style={{ background: '#e0f2fe', color: '#0369a1', borderRadius: 4, padding: '1px 5px', fontSize: '0.65rem', fontWeight: 700 }} title="Độ tương hợp ngữ nghĩa AI">
                           🧠 {Math.round(r.similarity * 100)}%
@@ -338,10 +377,12 @@ export default function RescueRequests() {
                     </div>
                     <a href={`tel:${r.phone}`} style={{ fontSize: '0.72rem', color: '#3b82f6', textDecoration: 'none' }}>{r.phone}</a>
                     <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>👥 {r.number_of_people} người</div>
+                    {r.requester_type !== 'SELF' && <div style={{ fontSize: '0.66rem', color: '#92400e', fontWeight: 700 }}>Bao ho: {r.reporter_phone || 'chua co SDT'}</div>}
+                    {isNeedsVerification(r) && <div style={{ fontSize: '0.66rem', color: '#dc2626', fontWeight: 700 }}>Can xac minh vi tri</div>}
                   </td>
                   <td style={{ fontSize: '0.75rem' }}>
                     <div style={{ fontWeight: 500 }}>{r.area_name}</div>
-                    <div style={{ color: '#94a3b8', fontSize: '0.7rem' }}>{r.address_detail?.substring(0, 35)}...</div>
+                    <div style={{ color: '#94a3b8', fontSize: '0.7rem' }}>{getRequestAddress(r)?.substring(0, 35)}...</div>
                   </td>
                   <td><LevelBadge level={r.emergency_level} /></td>
                   <td>
@@ -385,7 +426,7 @@ export default function RescueRequests() {
         </div>
       </div>
 
-      {assignModal && <AssignModal request={assignModal} teams={rescueTeams} onAssign={handleAssign} onClose={() => setAssignModal(null)} />}
+      {assignModal && <AssignModal request={assignModal} teams={rescueTeams} missions={rescueMissions} onAssign={handleAssign} onClose={() => setAssignModal(null)} />}
       {detailModal && <DetailModal request={detailModal} onClose={() => setDetailModal(null)} />}
     </div>
   );

@@ -2,8 +2,9 @@ import { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
-import { Plus, Edit2, Trash2, Building2, X, MapPin, Phone } from 'lucide-react';
+import { Plus, Edit2, Trash2, Building2, X } from 'lucide-react';
 import { AREAS } from '../../data/publicData';
+import { getSafeZoneOccupancy, toFiniteNumber } from '../../utils/safeZones';
 
 function SafeZoneForm({ initial, onSave, onClose }) {
   const [form, setForm] = useState(initial || {
@@ -38,19 +39,19 @@ function SafeZoneForm({ initial, onSave, onClose }) {
         </div>
         <div>
           <label className="form-label">Vĩ độ (Latitude)</label>
-          <input type="number" step="any" className="form-input" value={form.latitude} onChange={e => setForm(f => ({ ...f, latitude: parseFloat(e.target.value) }))} placeholder="18.1833" />
+          <input type="number" step="any" className="form-input" value={form.latitude} onChange={e => setForm(f => ({ ...f, latitude: e.target.value === '' ? '' : parseFloat(e.target.value) }))} placeholder="18.1833" />
         </div>
         <div>
           <label className="form-label">Kinh độ (Longitude)</label>
-          <input type="number" step="any" className="form-input" value={form.longitude} onChange={e => setForm(f => ({ ...f, longitude: parseFloat(e.target.value) }))} placeholder="105.7333" />
+          <input type="number" step="any" className="form-input" value={form.longitude} onChange={e => setForm(f => ({ ...f, longitude: e.target.value === '' ? '' : parseFloat(e.target.value) }))} placeholder="105.7333" />
         </div>
         <div>
           <label className="form-label">Sức chứa (người)</label>
-          <input type="number" min="1" className="form-input" value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: parseInt(e.target.value) }))} />
+          <input type="number" min="1" className="form-input" value={form.capacity} onChange={e => setForm(f => ({ ...f, capacity: e.target.value === '' ? '' : parseInt(e.target.value, 10) }))} />
         </div>
         <div>
           <label className="form-label">Số người hiện tại</label>
-          <input type="number" min="0" className="form-input" value={form.current_people} onChange={e => setForm(f => ({ ...f, current_people: parseInt(e.target.value) }))} />
+          <input type="number" min="0" className="form-input" value={form.current_people} onChange={e => setForm(f => ({ ...f, current_people: e.target.value === '' ? '' : parseInt(e.target.value, 10) }))} />
         </div>
         <div>
           <label className="form-label">Người phụ trách</label>
@@ -83,8 +84,9 @@ export default function SafeZones() {
     return true;
   });
 
-  const totalCapacity = safeZones.reduce((sum, sz) => sum + sz.capacity, 0);
-  const totalPeople = safeZones.reduce((sum, sz) => sum + sz.current_people, 0);
+  const totalCapacity = safeZones.reduce((sum, sz) => sum + Math.max(0, toFiniteNumber(sz.capacity)), 0);
+  const totalPeople = safeZones.reduce((sum, sz) => sum + Math.max(0, toFiniteNumber(sz.current_people)), 0);
+  const totalOccupancy = totalCapacity > 0 ? Math.round((totalPeople / totalCapacity) * 100) : 0;
 
   const handleSave = (form) => {
     const area = AREAS.find(a => a.id === form.area_id);
@@ -116,7 +118,7 @@ export default function SafeZones() {
           { label: 'Tổng điểm sơ tán', value: safeZones.length, color: '#3b82f6' },
           { label: 'Còn chỗ', value: safeZones.filter(s => s.status === 'AVAILABLE').length, color: '#10b981' },
           { label: 'Đã đầy', value: safeZones.filter(s => s.status === 'FULL').length, color: '#ef4444' },
-          { label: `${totalPeople}/${totalCapacity} người`, value: `${Math.round((totalPeople/totalCapacity)*100)}%`, color: '#f59e0b' },
+          { label: `${totalPeople}/${totalCapacity} người`, value: `${totalOccupancy}%`, color: '#f59e0b' },
         ].map((s, i) => (
           <div key={i} className="stat-card" style={{ textAlign: 'center' }}>
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: s.color }}>{s.value}</div>
@@ -141,8 +143,8 @@ export default function SafeZones() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '1rem' }}>
         {filtered.map(sz => {
-          const occupancy = Math.round((sz.current_people / sz.capacity) * 100);
-          const barColor = occupancy >= 95 ? '#ef4444' : occupancy >= 75 ? '#f59e0b' : '#10b981';
+          const occupancy = getSafeZoneOccupancy(sz);
+          const barColor = occupancy.percent >= 95 ? '#ef4444' : occupancy.percent >= 75 ? '#f59e0b' : '#10b981';
           return (
             <div key={sz.id} className="card">
               <div style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -155,11 +157,11 @@ export default function SafeZones() {
               <div style={{ padding: '1rem' }}>
                 <div style={{ marginBottom: '0.875rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', marginBottom: 6 }}>
-                    <span style={{ color: '#64748b' }}>Sức chứa: {sz.current_people}/{sz.capacity} người</span>
-                    <span style={{ fontWeight: 700, color: barColor }}>{occupancy}%</span>
+                    <span style={{ color: '#64748b' }}>Sức chứa: {occupancy.current_people}/{occupancy.capacity || '?'} người</span>
+                    <span style={{ fontWeight: 700, color: barColor }}>{occupancy.hasCapacity ? `${occupancy.percent}%` : 'Thiếu dữ liệu'}</span>
                   </div>
                   <div style={{ height: 8, background: '#f1f5f9', borderRadius: 4 }}>
-                    <div style={{ height: '100%', width: `${Math.min(occupancy, 100)}%`, background: barColor, borderRadius: 4, transition: 'width 0.3s' }} />
+                    <div style={{ height: '100%', width: `${occupancy.percent}%`, background: barColor, borderRadius: 4, transition: 'width 0.3s' }} />
                   </div>
                 </div>
 
