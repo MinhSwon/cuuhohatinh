@@ -17,13 +17,15 @@ function SendSMSModal({ onSend, onClose }) {
     { label: 'Cứu hộ hoàn tất', text: 'FLOODGUARD: Cam on ban da su dung he thong. Chuc ban va gia dinh binh an!' },
   ];
 
-  const handleSend = () => {
+  const handleSend = async () => {
     setLoading(true);
-    setTimeout(() => {
-      onSend(form);
+    try {
+      await onSend(form);
       setLoading(false);
       onClose();
-    }, 1000);
+    } catch {
+      setLoading(false);
+    }
   };
 
   return (
@@ -81,7 +83,7 @@ function SendSMSModal({ onSend, onClose }) {
 }
 
 export default function AlertsAndSMS() {
-  const { smsLogs, addSmsLog, floodWarnings } = useData();
+  const { smsLogs, sendSmsNotification, floodWarnings } = useData();
   const { currentUser } = useAuth();
   const toast = useToast();
   const [showSend, setShowSend] = useState(false);
@@ -98,13 +100,22 @@ export default function AlertsAndSMS() {
   const totalFailed = smsLogs.filter(s => s.status === 'FAILED').length;
   const totalCost = smsLogs.filter(s => s.status === 'SENT').reduce((sum, s) => sum + (s.cost || 0), 0);
 
-  const handleSend = (form) => {
-    const recipientCount = form.target === 'all' ? 7 : 4;
-    const phones = Array.from({ length: recipientCount }, (_, index) => `recipient-${index + 1}`);
-    phones.forEach(phone => {
-      addSmsLog({ phone, message: form.custom_message, provider: 'Viettel SMS', status: Math.random() > 0.08 ? 'SENT' : 'FAILED', cost: 500, related_warning_id: null, related_request_id: null });
-    });
-    toast.success(`Đã gửi ${phones.length} SMS!`);
+  const handleRealSend = async (form) => {
+    try {
+      const result = await sendSmsNotification({
+        target: form.target,
+        area_id: form.area_id,
+        message: form.custom_message,
+      });
+      if (result.failed > 0) {
+        toast.warning(`Da gui ${result.sent}/${result.total} tin. ${result.failed} tin that bai.`);
+      } else {
+        toast.success(`Da gui ${result.sent} SMS/Zalo thanh cong!`);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Khong gui duoc SMS/Zalo. Kiem tra cau hinh eSMS.');
+      throw err;
+    }
   };
 
   return (
@@ -176,7 +187,7 @@ export default function AlertsAndSMS() {
         </div>
       </div>
 
-      {showSend && <SendSMSModal onSend={handleSend} onClose={() => setShowSend(false)} />}
+      {showSend && <SendSMSModal onSend={handleRealSend} onClose={() => setShowSend(false)} />}
     </div>
   );
 }

@@ -73,7 +73,7 @@ function WarningForm({ initial, onSave, onClose }) {
 }
 
 export default function AlertsManager() {
-  const { floodWarnings, createWarning, updateWarning, deleteWarning, addSmsLog, addLog } = useData();
+  const { floodWarnings, createWarning, updateWarning, deleteWarning, sendSmsNotification, addLog } = useData();
   const { currentUser } = useAuth();
   const toast = useToast();
   const [showForm, setShowForm] = useState(false);
@@ -113,22 +113,25 @@ export default function AlertsManager() {
     addLog(currentUser?.id, currentUser?.full_name, 'Công bố cảnh báo', 'flood_warnings', w.id, w.title);
   };
 
-  const handleSendSMS = (w) => {
-    const mockPhones = Array.from({ length: 5 }, (_, index) => `recipient-${index + 1}`);
-    mockPhones.forEach(phone => {
-      addSmsLog({
-        phone,
-        message: `CANH BAO LU [${w.level}]: ${w.title.substring(0, 60)}. Khu vuc: ${w.area_name}. Thoi gian: ${new Date(w.start_time).toLocaleString('vi-VN')}`,
-        provider: 'Viettel SMS',
-        status: Math.random() > 0.1 ? 'SENT' : 'FAILED',
-        cost: 500,
+  const handleSendSMS = async (w) => {
+    const message = `CANH BAO LU [${w.level}]: ${w.title.substring(0, 60)}. Khu vuc: ${w.area_name}. Thoi gian: ${new Date(w.start_time).toLocaleString('vi-VN')}`;
+    try {
+      const result = await sendSmsNotification({
+        target: 'area',
+        area_id: w.area_id,
+        message,
         related_warning_id: w.id,
-        related_request_id: null,
       });
-    });
-    updateWarning(w.id, { sms_sent: true, sms_count: (w.sms_count || 0) + mockPhones.length });
-    toast.success(`Đã gửi SMS cho ${mockPhones.length} người dân!`);
-    addLog(currentUser?.id, currentUser?.full_name, 'Gửi SMS cảnh báo', 'sms_logs', w.id, `Gửi ${mockPhones.length} SMS cho ${w.area_name}`);
+      updateWarning(w.id, { sms_sent: result.sent > 0, sms_count: (w.sms_count || 0) + result.total });
+      if (result.failed > 0) {
+        toast.warning(`Da gui ${result.sent}/${result.total} tin canh bao. ${result.failed} tin that bai.`);
+      } else {
+        toast.success(`Da gui ${result.sent} SMS/Zalo canh bao thuc te!`);
+      }
+      addLog(currentUser?.id, currentUser?.full_name, 'Gui SMS canh bao', 'sms_logs', w.id, `Gui ${result.total} SMS cho ${w.area_name}`);
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Khong gui duoc SMS/Zalo. Kiem tra cau hinh eSMS.');
+    }
   };
 
   const handleDelete = (w) => {

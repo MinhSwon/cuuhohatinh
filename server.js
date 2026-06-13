@@ -114,6 +114,21 @@ const publicWriteRateLimit = parsePositiveInt(
   process.env.PUBLIC_WRITE_RATE_LIMIT,
   IS_DEPLOYED_RUNTIME ? 300 : 300
 );
+const ESMS_API_KEY = process.env.ESMS_API_KEY || '';
+const ESMS_SECRET_KEY = process.env.ESMS_SECRET_KEY || '';
+const ESMS_BRANDNAME = process.env.ESMS_BRANDNAME || '';
+const ESMS_SANDBOX = process.env.ESMS_SANDBOX ?? (IS_DEPLOYED_RUNTIME ? '0' : '1');
+const ESMS_CALLBACK_URL = process.env.ESMS_CALLBACK_URL || '';
+const ESMS_CALLBACK_TOKEN = process.env.ESMS_CALLBACK_TOKEN || '';
+const ESMS_SMS_ENDPOINT = 'https://rest.esms.vn/MainService.svc/json/SendMultipleMessage_V4_post_json/';
+const ESMS_MULTI_CHANNEL_ENDPOINT = 'https://rest.esms.vn/MainService.svc/json/MultiChannelMessage/';
+const ZALO_OA_ID = process.env.ZALO_OA_ID || '';
+const ZALO_ZNS_TEMPLATE_SOS = process.env.ZALO_ZNS_TEMPLATE_SOS || '';
+const ZALO_ZNS_TEMPLATE_ASSIGNED = process.env.ZALO_ZNS_TEMPLATE_ASSIGNED || '';
+const RESCUE_COORDINATOR_PHONES = (process.env.RESCUE_COORDINATOR_PHONES || '')
+  .split(',')
+  .map(phone => phone.trim())
+  .filter(Boolean);
 
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -201,7 +216,12 @@ const VULNERABLE_HOUSEHOLD_FIELDS = [
   'household_size', 'elderly_count', 'children_count', 'disabled_count', 'medical_note',
   'emergency_contact_name', 'emergency_contact_phone', 'latitude', 'longitude', 'priority_level', 'notes',
 ];
-const SMS_LOG_FIELDS = ['recipient', 'phone', 'message', 'status', 'provider', 'error', 'user_id', 'flood_warning_id', 'floodAlertId'];
+const SMS_LOG_FIELDS = [
+  'recipient', 'phone', 'message', 'status', 'provider', 'error', 'user_id',
+  'flood_warning_id', 'floodAlertId', 'related_warning_id', 'related_request_id',
+  'request_id', 'provider_message_id', 'channel', 'raw_response', 'cost',
+  'sent_at', 'delivered_at',
+];
 
 function createId(prefix) {
   return `${prefix}-${crypto.randomUUID()}`;
@@ -551,6 +571,374 @@ function getAssignmentWarnings(request, team) {
   }
 
   return warnings;
+}
+
+function normalizeVietnamPhone(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('84')) return digits;
+  if (digits.startsWith('0')) return `84${digits.slice(1)}`;
+  return digits;
+}
+
+function maskPhone(phone) {
+  const normalized = normalizeVietnamPhone(phone);
+  if (normalized.length < 6) return normalized;
+  return `${normalized.slice(0, 4)}***${normalized.slice(-3)}`;
+}
+
+function getEsmsCallbackUrl(requestId) {
+  if (!ESMS_CALLBACK_URL) return undefined;
+  try {
+    const url = new URL(ESMS_CALLBACK_URL);
+    if (ESMS_CALLBACK_TOKEN) url.searchParams.set('token', ESMS_CALLBACK_TOKEN);
+    if (requestId) url.searchParams.set('request_id', requestId);
+    return url.toString();
+  } catch {
+    return ESMS_CALLBACK_URL;
+  }
+}
+
+function hasEsmsSmsConfig() {
+  return Boolean(ESMS_API_KEY && ESMS_SECRET_KEY && ESMS_BRANDNAME);
+}
+
+function hasEsmsZaloConfig(templateId) {
+  return Boolean(hasEsmsSmsConfig() && ZALO_OA_ID && templateId);
+}
+
+function createSmsLog(data) {
+  return {
+    id: createId('sms'),
+    provider: data.provider || 'eSMS',
+    channel: data.channel || 'sms',
+    phone: normalizeVietnamPhone(data.phone),
+    recipient: data.recipient || '',
+    message: data.message || '',
+    status: data.status || 'PENDING',
+    error: data.error || '',
+    request_id: data.request_id || null,
+    provider_message_id: data.provider_message_id || null,
+    related_warning_id: data.related_warning_id || data.flood_warning_id || data.floodAlertId || null,
+    related_request_id: data.related_request_id || null,
+    raw_response: data.raw_response || null,
+    cost: Number(data.cost || 0),
+    sent_at: data.sent_at || new Date().toISOString(),
+    delivered_at: data.delivered_at || null,
+  };
+}
+
+function addSmsLog(data, { persist = true, broadcast = true } = {}) {
+  const log = createSmsLog(data);
+  if (!Array.isArray(db.smsLogs)) db.smsLogs = [];
+  db.smsLogs.unshift(log);
+  if (persist) saveDb();
+  if (broadcast) broadcastDbUpdate('sms-log:created', ['smsLogs']);
+  return log;
+}
+
+function updateSmsLogByRequestId(requestId, patch) {
+  if (!requestId || !Array.isArray(db.smsLogs)) return null;
+  const idx = db.smsLogs.findIndex(log => log.request_id === requestId);
+  if (idx === -1) return null;
+  db.smsLogs[idx] = { ...db.smsLogs[idx], ...patch, raw_response: patch.raw_response || db.smsLogs[idx].raw_response };
+  saveDb();
+  broadcastDbUpdate('sms-log:updated', ['smsLogs']);
+  return db.smsLogs[idx];
+}
+
+async function postJsonWithTimeout(url, body, timeoutMs = 12000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const text = await response.text();
+    let json = null;
+    try {
+      json = text ? JSON.parse(text) : null;
+    } catch {
+      json = { raw: text };
+    }
+    return { ok: response.ok, status: response.status, data: json };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function getEsmsStatus(responseData) {
+  const code = String(responseData?.CodeResult || responseData?.code || '');
+  return code === '100' ? 'SENT' : 'FAILED';
+}
+
+async function sendEsmsSms({ phone, content, requestId, relatedWarningId, relatedRequestId, recipient }) {
+  const normalizedPhone = normalizeVietnamPhone(phone);
+  if (!normalizedPhone) {
+    return addSmsLog({
+      phone,
+      recipient,
+      message: content,
+      status: 'FAILED',
+      provider: 'eSMS',
+      channel: 'sms',
+      request_id: requestId,
+      related_warning_id: relatedWarningId,
+      related_request_id: relatedRequestId,
+      error: 'Missing receiver phone',
+    });
+  }
+
+  if (!hasEsmsSmsConfig()) {
+    return addSmsLog({
+      phone: normalizedPhone,
+      recipient,
+      message: content,
+      status: 'FAILED',
+      provider: 'eSMS',
+      channel: 'sms',
+      request_id: requestId,
+      related_warning_id: relatedWarningId,
+      related_request_id: relatedRequestId,
+      error: 'eSMS is not configured. Set ESMS_API_KEY, ESMS_SECRET_KEY, ESMS_BRANDNAME.',
+    });
+  }
+
+  const body = {
+    ApiKey: ESMS_API_KEY,
+    SecretKey: ESMS_SECRET_KEY,
+    Brandname: ESMS_BRANDNAME,
+    Phone: normalizedPhone,
+    Content: content,
+    SmsType: '2',
+    IsUnicode: '1',
+    Sandbox: ESMS_SANDBOX,
+    RequestId: requestId,
+  };
+  const callbackUrl = getEsmsCallbackUrl(requestId);
+  if (callbackUrl) body.CallbackUrl = callbackUrl;
+
+  try {
+    const response = await postJsonWithTimeout(ESMS_SMS_ENDPOINT, body);
+    const status = response.ok ? getEsmsStatus(response.data) : 'FAILED';
+    return addSmsLog({
+      phone: normalizedPhone,
+      recipient,
+      message: content,
+      status,
+      provider: 'eSMS',
+      channel: 'sms',
+      request_id: requestId,
+      provider_message_id: response.data?.SMSID || null,
+      related_warning_id: relatedWarningId,
+      related_request_id: relatedRequestId,
+      error: status === 'FAILED' ? response.data?.ErrorMessage || `HTTP ${response.status}` : '',
+      raw_response: response.data,
+    });
+  } catch (err) {
+    return addSmsLog({
+      phone: normalizedPhone,
+      recipient,
+      message: content,
+      status: 'FAILED',
+      provider: 'eSMS',
+      channel: 'sms',
+      request_id: requestId,
+      related_warning_id: relatedWarningId,
+      related_request_id: relatedRequestId,
+      error: err?.message || 'eSMS request failed',
+    });
+  }
+}
+
+async function sendEsmsZaloThenSms({
+  phone,
+  templateId,
+  params = [],
+  smsContent,
+  requestId,
+  relatedWarningId,
+  relatedRequestId,
+  recipient,
+}) {
+  if (!hasEsmsZaloConfig(templateId)) {
+    return sendEsmsSms({
+      phone,
+      content: smsContent,
+      requestId: `${requestId}-sms`,
+      relatedWarningId,
+      relatedRequestId,
+      recipient,
+    });
+  }
+
+  const normalizedPhone = normalizeVietnamPhone(phone);
+  const callbackUrl = getEsmsCallbackUrl(requestId);
+  const body = {
+    ApiKey: ESMS_API_KEY,
+    SecretKey: ESMS_SECRET_KEY,
+    Phone: normalizedPhone,
+    Channels: ['zalo', 'sms'],
+    Data: [
+      {
+        TempID: templateId,
+        Params: params.map(value => String(value ?? '')),
+        OAID: ZALO_OA_ID,
+        RequestId: `${requestId}-zalo`,
+        Sandbox: ESMS_SANDBOX,
+        SendingMode: '1',
+        ...(callbackUrl ? { CallbackUrl: callbackUrl } : {}),
+      },
+      {
+        Content: smsContent,
+        IsUnicode: '1',
+        SmsType: '2',
+        Brandname: ESMS_BRANDNAME,
+        RequestId: `${requestId}-sms`,
+        Sandbox: ESMS_SANDBOX,
+        ...(callbackUrl ? { CallbackUrl: callbackUrl } : {}),
+      },
+    ],
+  };
+
+  try {
+    const response = await postJsonWithTimeout(ESMS_MULTI_CHANNEL_ENDPOINT, body);
+    const status = response.ok ? getEsmsStatus(response.data) : 'FAILED';
+    return addSmsLog({
+      phone: normalizedPhone,
+      recipient,
+      message: smsContent,
+      status,
+      provider: 'eSMS',
+      channel: 'zalo_sms',
+      request_id: requestId,
+      provider_message_id: response.data?.SMSID || null,
+      related_warning_id: relatedWarningId,
+      related_request_id: relatedRequestId,
+      error: status === 'FAILED' ? response.data?.ErrorMessage || `HTTP ${response.status}` : '',
+      raw_response: response.data,
+    });
+  } catch (err) {
+    return addSmsLog({
+      phone: normalizedPhone,
+      recipient,
+      message: smsContent,
+      status: 'FAILED',
+      provider: 'eSMS',
+      channel: 'zalo_sms',
+      request_id: requestId,
+      related_warning_id: relatedWarningId,
+      related_request_id: relatedRequestId,
+      error: err?.message || 'eSMS multi-channel request failed',
+    });
+  }
+}
+
+function getUserById(userId) {
+  return Array.isArray(db.users) ? db.users.find(user => user.id === userId) : null;
+}
+
+function collectNotificationRecipients({ target = 'all', area_id = '' } = {}) {
+  const recipients = new Map();
+  const addRecipient = (phone, recipient = '', source = '') => {
+    const normalizedPhone = normalizeVietnamPhone(phone);
+    if (!normalizedPhone) return;
+    recipients.set(normalizedPhone, { phone: normalizedPhone, recipient, source });
+  };
+
+  if (target === 'vulnerable') {
+    for (const household of Array.isArray(db.vulnerableHouseholds) ? db.vulnerableHouseholds : []) {
+      if (area_id && household.area_id !== area_id) continue;
+      addRecipient(household.phone, household.full_name || household.head_name, 'vulnerable_household');
+      addRecipient(household.emergency_contact_phone, household.emergency_contact_name, 'vulnerable_contact');
+    }
+  } else {
+    for (const profile of Array.isArray(db.citizenProfiles) ? db.citizenProfiles : []) {
+      if (profile.sms_opt_in === false) continue;
+      if (target === 'area' && area_id && profile.area_id !== area_id) continue;
+      const user = getUserById(profile.user_id);
+      addRecipient(user?.phone, user?.full_name, 'citizen_profile');
+      addRecipient(profile.emergency_contact_phone, profile.emergency_contact_name, 'emergency_contact');
+    }
+  }
+
+  return Array.from(recipients.values());
+}
+
+async function sendBulkSms({ recipients, message, relatedWarningId = null, relatedRequestId = null, requestPrefix = 'bulk' }) {
+  const logs = [];
+  for (const [index, recipient] of recipients.entries()) {
+    const requestId = `${requestPrefix}-${index + 1}-${Date.now()}`;
+    // Sequential sending keeps provider throttling predictable for small MVP-to-production deployments.
+    // If volume grows, replace this with a persistent queue worker.
+    const log = await sendEsmsSms({
+      phone: recipient.phone,
+      content: message,
+      requestId,
+      recipient: recipient.recipient,
+      relatedWarningId,
+      relatedRequestId,
+    });
+    logs.push(log);
+  }
+  return logs;
+}
+
+function fireAndForgetNotification(task, label) {
+  Promise.resolve()
+    .then(task)
+    .catch(err => console.error(`${label || 'Notification task'} failed:`, err));
+}
+
+async function notifyRescueRequestCreated(request) {
+  const area = request.victim_area_name || request.area_name || 'chua xac dinh';
+  const peopleCount = request.number_of_people || 1;
+  const level = request.emergency_level || 'HIGH';
+  const victimName = request.victim_name || request.full_name || 'Nguoi can cuu ho';
+  const smsContent = `FLOODGUARD SOS: ${victimName} can cuu ho tai ${area}. So nguoi: ${peopleCount}. Muc do: ${level}.`;
+
+  for (const phone of RESCUE_COORDINATOR_PHONES) {
+    await sendEsmsSms({
+      phone,
+      content: smsContent,
+      requestId: `${request.id}-coordinator-${normalizeVietnamPhone(phone)}`,
+      relatedRequestId: request.id,
+      recipient: 'Dieu phoi cuu ho',
+    });
+  }
+
+  const reporterPhone = request.reporter_phone || request.phone;
+  if (reporterPhone) {
+    await sendEsmsZaloThenSms({
+      phone: reporterPhone,
+      templateId: ZALO_ZNS_TEMPLATE_SOS,
+      params: [area, peopleCount, level],
+      smsContent: `FLOODGUARD: Yeu cau cuu ho cua ban da duoc tiep nhan tai ${area}. Hay giu dien thoai de doi lien he.`,
+      requestId: `${request.id}-reporter-confirm`,
+      relatedRequestId: request.id,
+      recipient: request.reporter_name || victimName,
+    });
+  }
+}
+
+async function notifyRescueAssigned(request, teamName) {
+  const phone = request.reporter_phone || request.victim_phone || request.phone;
+  if (!phone) return;
+
+  const victimName = request.victim_name || request.full_name || 'nguoi can cuu';
+  const area = request.victim_area_name || request.area_name || 'khu vuc cua ban';
+  await sendEsmsZaloThenSms({
+    phone,
+    templateId: ZALO_ZNS_TEMPLATE_ASSIGNED,
+    params: [victimName, teamName, area],
+    smsContent: `FLOODGUARD: Doi ${teamName} da nhan cuu ho cho ${victimName} tai ${area}. Hay giu dien thoai va ra tin hieu khi thay doi.`,
+    requestId: `${request.id}-assigned`,
+    relatedRequestId: request.id,
+    recipient: request.reporter_name || victimName,
+  });
 }
 
 function normalizeSafeZone(safeZone) {
@@ -1751,6 +2139,7 @@ app.post('/api/rescue-requests', publicWriteLimiter, authenticateOptional, async
       db.rescueRequests.unshift(request);
       saveDb();
       broadcastDbUpdate('rescue-request:created', ['rescueRequests']);
+      fireAndForgetNotification(() => notifyRescueRequestCreated(request), 'Rescue request notification');
       return res.status(201).json(request);
     }
 
@@ -1768,6 +2157,7 @@ app.post('/api/rescue-requests', publicWriteLimiter, authenticateOptional, async
     db.rescueRequests.unshift(request);
     saveDb();
     broadcastDbUpdate('rescue-request:created', ['rescueRequests']);
+    fireAndForgetNotification(() => notifyRescueRequestCreated(request), 'Rescue request notification');
     return res.status(201).json(request);
   } catch (err) {
     console.error('Rescue request route failed:', err);
@@ -1905,6 +2295,7 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), (req, res
 
   saveDb();
   broadcastDbUpdate('rescue-request:assigned', ['rescueRequests', 'rescueMissions', 'rescueTeams', 'activityLogs', 'notifications']);
+  fireAndForgetNotification(() => notifyRescueAssigned(request, resolvedTeamName), 'Rescue assignment notification');
   res.json({ success: true, request, mission, assignment_warnings: assignmentWarnings, rescueTeams: db.rescueTeams });
 });
 
@@ -2087,6 +2478,100 @@ app.put('/api/vulnerable-households/:id', requireRoles(ADMIN_ROLES), (req, res) 
   db.vulnerableHouseholds[idx] = { ...db.vulnerableHouseholds[idx], ...pickAllowed(req.body, VULNERABLE_HOUSEHOLD_FIELDS) };
   saveDb();
   res.json(db.vulnerableHouseholds[idx]);
+});
+
+app.get('/api/notifications/provider-status', requireRoles(ADMIN_ROLES), (req, res) => {
+  res.json({
+    provider: 'eSMS',
+    sms_configured: hasEsmsSmsConfig(),
+    zalo_configured: Boolean(hasEsmsSmsConfig() && ZALO_OA_ID),
+    sandbox: ESMS_SANDBOX === '1',
+    brandname_configured: Boolean(ESMS_BRANDNAME),
+    callback_configured: Boolean(ESMS_CALLBACK_URL),
+  });
+});
+
+app.post('/api/sms/send', requireRoles(ADMIN_ROLES), async (req, res) => {
+  const data = sanitizeObject(req.body || {});
+  const message = String(data.message || data.content || '').trim();
+  if (!message) return res.status(400).json({ error: 'Message is required' });
+  if (!hasEsmsSmsConfig()) {
+    return res.status(503).json({
+      error: 'eSMS is not configured',
+      required_env: ['ESMS_API_KEY', 'ESMS_SECRET_KEY', 'ESMS_BRANDNAME'],
+    });
+  }
+
+  const directPhones = Array.isArray(data.phones)
+    ? data.phones.map(phone => ({ phone, recipient: '', source: 'manual' }))
+    : [];
+  const recipients = directPhones.length > 0
+    ? directPhones
+    : collectNotificationRecipients({ target: data.target || 'all', area_id: data.area_id || '' });
+
+  if (recipients.length === 0) {
+    return res.status(400).json({ error: 'No valid recipients found' });
+  }
+
+  const logs = await sendBulkSms({
+    recipients,
+    message,
+    relatedWarningId: data.related_warning_id || data.flood_warning_id || null,
+    relatedRequestId: data.related_request_id || null,
+    requestPrefix: data.related_warning_id || data.related_request_id || 'manual-sms',
+  });
+
+  if (data.related_warning_id) {
+    const warning = db.floodWarnings.find(item => item.id === data.related_warning_id);
+    if (warning) {
+      warning.sms_sent = logs.some(log => log.status === 'SENT');
+      warning.sms_count = (warning.sms_count || 0) + logs.length;
+      warning.updated_at = new Date().toISOString();
+      saveDb();
+      broadcastDbUpdate('warning:sms-sent', ['floodWarnings']);
+    }
+  }
+
+  const sent = logs.filter(log => log.status === 'SENT').length;
+  const failed = logs.filter(log => log.status === 'FAILED').length;
+  res.json({ success: failed === 0, total: logs.length, sent, failed, logs });
+});
+
+app.post('/api/notifications/esms-callback', (req, res) => {
+  if (ESMS_CALLBACK_TOKEN && req.query.token !== ESMS_CALLBACK_TOKEN) {
+    return res.status(401).json({ error: 'Invalid callback token' });
+  }
+
+  const payload = sanitizeObject(req.body || {});
+  const requestId = String(req.query.request_id || payload.RequestId || payload.RequestID || payload.request_id || '');
+  const providerStatus = String(payload.Status || payload.SendStatus || payload.CodeResult || payload.status || '').toUpperCase();
+  const isFailed = providerStatus.includes('FAIL') || ['101', '104', '124', '146', '789', '99'].includes(providerStatus);
+  const status = isFailed ? 'FAILED' : 'SENT';
+
+  const updated = updateSmsLogByRequestId(requestId, {
+    status,
+    provider_message_id: payload.SMSID || payload.SmsId || payload.MessageId || null,
+    error: isFailed ? payload.ErrorMessage || payload.error || 'Provider callback failed' : '',
+    raw_response: payload,
+    delivered_at: status === 'SENT' ? new Date().toISOString() : null,
+  });
+
+  if (!updated) {
+    addSmsLog({
+      phone: payload.Phone || payload.phone || '',
+      recipient: payload.Receiver || '',
+      message: 'Provider callback without local request log',
+      status,
+      provider: 'eSMS',
+      channel: 'callback',
+      request_id: requestId || null,
+      provider_message_id: payload.SMSID || payload.SmsId || payload.MessageId || null,
+      error: isFailed ? payload.ErrorMessage || payload.error || 'Provider callback failed' : '',
+      raw_response: payload,
+    });
+  }
+
+  res.json({ success: true });
 });
 
 app.post('/api/sms-logs', requireRoles(ADMIN_ROLES), (req, res) => {

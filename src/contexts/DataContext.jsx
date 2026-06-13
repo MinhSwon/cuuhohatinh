@@ -502,6 +502,14 @@ export function DataProvider({ children }) {
     }
   }, []);
 
+  const sendSmsNotification = useCallback(async (data) => {
+    const res = await axios.post('/api/sms/send', data);
+    const dbRes = await axios.get('/api/db');
+    if (dbRes.data.smsLogs) setSmsLogs(dbRes.data.smsLogs);
+    if (dbRes.data.floodWarnings) setFloodWarnings(dbRes.data.floodWarnings);
+    return res.data;
+  }, []);
+
   // Damage reports
   const createDamageReport = useCallback(async (data) => {
     try {
@@ -571,7 +579,7 @@ export function DataProvider({ children }) {
       createTeam, updateTeam, deleteTeam,
       createSafeZone, updateSafeZone, deleteSafeZone,
       createRoute, updateRoute, deleteRoute,
-      addSmsLog,
+      addSmsLog, sendSmsNotification,
       createDamageReport,
       createVulnerableHousehold, updateVulnerableHousehold,
     }}>
