@@ -2,22 +2,36 @@ import { RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
 import { requireFirebaseAuth } from './firebase';
 
 let recaptchaVerifier = null;
+const DEFAULT_RECAPTCHA_CONTAINER_ID = 'firebase-recaptcha-container';
 
-export function getRecaptchaVerifier(containerId = 'recaptcha-container') {
+function resetRecaptchaContainer(containerId = DEFAULT_RECAPTCHA_CONTAINER_ID) {
+  if (typeof document === 'undefined') return;
+  const container = document.getElementById(containerId);
+  if (container) {
+    container.innerHTML = '';
+  }
+}
+
+export function getRecaptchaVerifier(containerId = DEFAULT_RECAPTCHA_CONTAINER_ID) {
   const auth = requireFirebaseAuth();
 
   if (recaptchaVerifier) {
     return recaptchaVerifier;
   }
 
+  resetRecaptchaContainer(containerId);
+
   recaptchaVerifier = new RecaptchaVerifier(auth, containerId, {
     size: 'invisible',
+    'expired-callback': () => {
+      resetRecaptchaVerifier();
+    },
   });
 
   return recaptchaVerifier;
 }
 
-export async function sendPhoneOtp(phoneNumber, containerId = 'recaptcha-container') {
+export async function sendPhoneOtp(phoneNumber, containerId = DEFAULT_RECAPTCHA_CONTAINER_ID) {
   const auth = requireFirebaseAuth();
   const verifier = getRecaptchaVerifier(containerId);
   return signInWithPhoneNumber(auth, phoneNumber, verifier);
@@ -43,4 +57,5 @@ export function resetRecaptchaVerifier() {
     recaptchaVerifier.clear();
     recaptchaVerifier = null;
   }
+  resetRecaptchaContainer();
 }

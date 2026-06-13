@@ -24,6 +24,7 @@ function getOtpErrorMessage(err) {
   if (code.includes('too-many-requests')) return 'Gửi OTP quá nhiều lần. Vui lòng đợi một lúc rồi thử lại.';
   if (code.includes('invalid-verification-code')) return 'Mã OTP không đúng. Vui lòng kiểm tra lại.';
   if (code.includes('captcha-check-failed')) return 'reCAPTCHA không hợp lệ. Tải lại trang và thử lại.';
+  if (code.includes('internal-error')) return 'Firebase chưa gửi được OTP. Hãy kiểm tra Phone provider, Authorized domains, SMS region policy và cấu hình Billing/Blaze trong Firebase Console.';
   return err?.message || 'Không gửi/xác thực được OTP Firebase.';
 }
 
@@ -73,6 +74,7 @@ export default function RegisterPage() {
       setOtpCode('');
       toast.success(`Đã gửi mã OTP đến ${firebasePhone}.`);
     } catch (err) {
+      console.error('Firebase phone OTP failed:', err);
       resetRecaptchaVerifier();
       toast.error(getOtpErrorMessage(err));
     } finally {
@@ -182,10 +184,9 @@ export default function RegisterPage() {
                 >
                   {isPhoneVerified ? 'Đã xác thực SĐT' : otpLoading ? 'Đang gửi OTP...' : 'Gửi mã OTP'}
                 </button>
+                <div id="firebase-recaptcha-container" />
               </div>
             </div>
-
-            <div id="recaptcha-container" />
 
             {confirmationResult && !isPhoneVerified && (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.75rem', marginBottom: '0.75rem' }}>
