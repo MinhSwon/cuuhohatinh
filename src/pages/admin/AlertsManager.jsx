@@ -114,7 +114,7 @@ export default function AlertsManager() {
   };
 
   const handleSendSMS = async (w) => {
-    const message = `CANH BAO LU [${w.level}]: ${w.title.substring(0, 60)}. Khu vuc: ${w.area_name}. Thoi gian: ${new Date(w.start_time).toLocaleString('vi-VN')}`;
+    const message = `CẢNH BÁO LŨ [${w.level}]: ${w.title.substring(0, 60)}. Khu vực: ${w.area_name}. Thời gian: ${new Date(w.start_time).toLocaleString('vi-VN')}`;
     try {
       const result = await sendSmsNotification({
         target: 'area',
@@ -124,13 +124,13 @@ export default function AlertsManager() {
       });
       updateWarning(w.id, { sms_sent: result.sent > 0, sms_count: (w.sms_count || 0) + result.total });
       if (result.failed > 0) {
-        toast.warning(`Da gui ${result.sent}/${result.total} tin canh bao. ${result.failed} tin that bai.`);
+        toast.warning(`Đã gửi ${result.sent}/${result.total} tin cảnh báo. ${result.failed} tin thất bại.`);
       } else {
-        toast.success(`Da gui ${result.sent} SMS/Zalo canh bao thuc te!`);
+        toast.success(`Đã gửi ${result.sent} SMS/Zalo cảnh báo thực tế!`);
       }
-      addLog(currentUser?.id, currentUser?.full_name, 'Gui SMS canh bao', 'sms_logs', w.id, `Gui ${result.total} SMS cho ${w.area_name}`);
+      addLog(currentUser?.id, currentUser?.full_name, 'Gửi SMS cảnh báo', 'sms_logs', w.id, `Gửi ${result.total} SMS cho ${w.area_name}`);
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Khong gui duoc SMS/Zalo. Kiem tra cau hinh eSMS.');
+      toast.error(err.response?.data?.error || 'Không gửi được SMS/Zalo. Kiểm tra cấu hình eSMS.');
     }
   };
 

@@ -18,7 +18,7 @@ export const TERMINAL_RESCUE_STATUSES = [
 ];
 
 export function getRequestName(request) {
-  return request?.victim_name || request?.full_name || 'Nguoi can cuu ho';
+  return request?.victim_name || request?.full_name || 'Người cần cứu hộ';
 }
 
 export function getRequestPhone(request) {
@@ -117,15 +117,15 @@ export function getAssignmentWarnings(request, missions = [], teams = [], select
     warnings.push({
       type: 'NEARBY_ACTIVE_MISSION',
       message: nearest
-        ? `Da co ${nearest.mission.team_name || 'mot doi'} dang xu ly cach ${formatDistance(nearest.distance)}. Can gom cum hoac phan cong ho tro.`
-        : `Da co ${request.nearby_active_team_name || 'mot doi'} dang den khu vuc nay. Can xac minh de tranh trung doi.`,
+        ? `Đã có ${nearest.mission.team_name || 'một đội'} đang xử lý cách ${formatDistance(nearest.distance)}. Cần gom cụm hoặc phân công hỗ trợ.`
+        : `Đã có ${request.nearby_active_team_name || 'một đội'} đang đến khu vực này. Cần xác minh để tránh trùng đội.`,
     });
   }
 
   if (!getRequestLatLng(request)) {
     warnings.push({
       type: 'NEEDS_LOCATION_VERIFICATION',
-      message: 'Yeu cau chua co toa do GPS cua nguoi can cuu, can goi xac minh truoc khi doi xuat phat.',
+      message: 'Yêu cầu chưa có tọa độ GPS của người cần cứu, cần gọi xác minh trước khi đội xuất phát.',
     });
   }
 
@@ -135,7 +135,7 @@ export function getAssignmentWarnings(request, missions = [], teams = [], select
     if (recommendation.overCapacity) {
       warnings.push({
         type: 'TEAM_OVER_CAPACITY',
-        message: `${selectedTeam.team_name || selectedTeam.name} da dat tai ${recommendation.activeCount}/${recommendation.maxActive} nhiem vu dang xu ly.`,
+        message: `${selectedTeam.team_name || selectedTeam.name} đã đạt tải ${recommendation.activeCount}/${recommendation.maxActive} nhiệm vụ đang xử lý.`,
       });
     }
     if (recommendation.unavailable) {

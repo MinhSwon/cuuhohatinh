@@ -33,7 +33,7 @@ function generateAIResponse(message, data) {
   }
 
   if (msg.includes('sms') || msg.includes('tin nhắn') || msg.includes('nội dung')) {
-    return `📱 **Mẫu SMS cảnh báo lũ:**\n\n**🔴 Khẩn cấp:**\nCANH BAO KHAN CAP: Lu dang len cao. Hay di tan ngay! Diem so tan: Truong THCS Huong Khe. LH khan: 0693851000\n\n**🟠 Mức cao:**\nCANH BAO LU: Nuoc dang dang, hay chuan bi di tan. Theo doi tin tuc tren loa phat thanh.\n\n**🟡 Theo dõi:**\nCANH BAO: Muc nuoc cac suong dang tang. Hay chu y va san sang di tan khi co lenh.\n\n💡 *Gợi ý: Nội dung SMS dưới 160 ký tự để tránh bị tách tin.*`;
+    return `📱 **Mẫu SMS cảnh báo lũ:**\n\n**🔴 Khẩn cấp:**\nCẢNH BÁO KHẨN CẤP: Lũ đang lên cao. Hãy di tản ngay! Điểm sơ tán: Trường THCS Hương Khê. LH khẩn: 0693851000\n\n**🟠 Mức cao:**\nCẢNH BÁO LŨ: Nước đang dâng, hãy chuẩn bị di tản. Theo dõi tin tức trên loa phát thanh.\n\n**🟡 Theo dõi:**\nCẢNH BÁO: Mực nước các suối đang tăng. Hãy chú ý và sẵn sàng di tản khi có lệnh.\n\n💡 *Gợi ý: Nội dung SMS dưới 160 ký tự để tránh bị tách tin.*`;
   }
 
   if (msg.includes('thống kê') || msg.includes('báo cáo') || msg.includes('phân tích')) {

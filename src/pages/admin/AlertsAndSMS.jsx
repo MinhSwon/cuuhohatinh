@@ -11,10 +11,10 @@ function SendSMSModal({ onSend, onClose }) {
   const [loading, setLoading] = useState(false);
 
   const templateMessages = [
-    { label: 'Cảnh báo lũ khẩn cấp', text: 'CANH BAO KHAN CAP: Lu dang len cao tai khu vuc cua ban. Hay di tan ngay den diem an toan! Lien he: 0693851000' },
-    { label: 'Yêu cầu cứu hộ được tiếp nhận', text: 'FLOODGUARD: Yeu cau cuu ho cua ban da duoc tiep nhan. Doi cuu ho dang tren duong den. Giu lien lac!' },
-    { label: 'Đội cứu hộ đang đến', text: 'FLOODGUARD: Doi cuu ho dang tiep can vi tri cua ban. Xin hay o yen tai cho va ra tin hieu!' },
-    { label: 'Cứu hộ hoàn tất', text: 'FLOODGUARD: Cam on ban da su dung he thong. Chuc ban va gia dinh binh an!' },
+    { label: 'Cảnh báo lũ khẩn cấp', text: 'CẢNH BÁO KHẨN CẤP: Lũ đang lên cao tại khu vực của bạn. Hãy di tản ngay đến điểm an toàn! Liên hệ: 0693851000' },
+    { label: 'Yêu cầu cứu hộ được tiếp nhận', text: 'FLOODGUARD: Yêu cầu cứu hộ của bạn đã được tiếp nhận. Đội cứu hộ đang trên đường đến. Giữ liên lạc!' },
+    { label: 'Đội cứu hộ đang đến', text: 'FLOODGUARD: Đội cứu hộ đang tiếp cận vị trí của bạn. Xin hãy ở yên tại chỗ và ra tín hiệu!' },
+    { label: 'Cứu hộ hoàn tất', text: 'FLOODGUARD: Cảm ơn bạn đã sử dụng hệ thống. Chúc bạn và gia đình bình an!' },
   ];
 
   const handleSend = async () => {
@@ -108,12 +108,12 @@ export default function AlertsAndSMS() {
         message: form.custom_message,
       });
       if (result.failed > 0) {
-        toast.warning(`Da gui ${result.sent}/${result.total} tin. ${result.failed} tin that bai.`);
+        toast.warning(`Đã gửi ${result.sent}/${result.total} tin. ${result.failed} tin thất bại.`);
       } else {
-        toast.success(`Da gui ${result.sent} SMS/Zalo thanh cong!`);
+        toast.success(`Đã gửi ${result.sent} SMS/Zalo thành công!`);
       }
     } catch (err) {
-      toast.error(err.response?.data?.error || 'Khong gui duoc SMS/Zalo. Kiem tra cau hinh eSMS.');
+      toast.error(err.response?.data?.error || 'Không gửi được SMS/Zalo. Kiểm tra cấu hình eSMS.');
       throw err;
     }
   };

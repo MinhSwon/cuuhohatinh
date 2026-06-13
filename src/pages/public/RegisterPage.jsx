@@ -5,6 +5,27 @@ import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Phone, Lock, User, MapPin } from 'lucide-react';
 import { AREAS } from '../../data/publicData';
+import { sendPhoneOtp, verifyPhoneOtp, resetRecaptchaVerifier } from '../../lib/firebasePhoneAuth';
+
+function toFirebasePhoneNumber(phone) {
+  const digits = String(phone || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('84')) return `+${digits}`;
+  if (digits.startsWith('0')) return `+84${digits.slice(1)}`;
+  if (digits.startsWith('9') || digits.startsWith('8') || digits.startsWith('7') || digits.startsWith('5') || digits.startsWith('3')) {
+    return `+84${digits}`;
+  }
+  return `+${digits}`;
+}
+
+function getOtpErrorMessage(err) {
+  const code = err?.code || '';
+  if (code.includes('invalid-phone-number')) return 'Số điện thoại không hợp lệ. Hãy nhập dạng 09... hoặc +84...';
+  if (code.includes('too-many-requests')) return 'Gửi OTP quá nhiều lần. Vui lòng đợi một lúc rồi thử lại.';
+  if (code.includes('invalid-verification-code')) return 'Mã OTP không đúng. Vui lòng kiểm tra lại.';
+  if (code.includes('captcha-check-failed')) return 'reCAPTCHA không hợp lệ. Tải lại trang và thử lại.';
+  return err?.message || 'Không gửi/xác thực được OTP Firebase.';
+}
 
 export default function RegisterPage() {
   const [form, setForm] = useState({
@@ -14,14 +35,78 @@ export default function RegisterPage() {
     emergency_contact_name: '', emergency_contact_phone: '',
   });
   const [loading, setLoading] = useState(false);
+  const [otpCode, setOtpCode] = useState('');
+  const [otpLoading, setOtpLoading] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [confirmationResult, setConfirmationResult] = useState(null);
+  const [verifiedPhone, setVerifiedPhone] = useState('');
+  const [firebaseIdToken, setFirebaseIdToken] = useState('');
   const { setUsers, setCitizenProfiles } = useData();
   const toast = useToast();
   const navigate = useNavigate();
+  const isPhoneVerified = Boolean(firebaseIdToken && verifiedPhone === form.phone);
+
+  const handlePhoneChange = (e) => {
+    const nextPhone = e.target.value;
+    setForm(f => ({ ...f, phone: nextPhone }));
+    if (verifiedPhone || confirmationResult) {
+      setVerifiedPhone('');
+      setFirebaseIdToken('');
+      setConfirmationResult(null);
+      setOtpCode('');
+      resetRecaptchaVerifier();
+    }
+  };
+
+  const handleSendOtp = async () => {
+    const firebasePhone = toFirebasePhoneNumber(form.phone);
+    if (firebasePhone.length < 10) {
+      toast.error('Vui lòng nhập số điện thoại hợp lệ trước khi gửi OTP.');
+      return;
+    }
+
+    setOtpLoading(true);
+    try {
+      resetRecaptchaVerifier();
+      const result = await sendPhoneOtp(firebasePhone);
+      setConfirmationResult(result);
+      setOtpCode('');
+      toast.success(`Đã gửi mã OTP đến ${firebasePhone}.`);
+    } catch (err) {
+      resetRecaptchaVerifier();
+      toast.error(getOtpErrorMessage(err));
+    } finally {
+      setOtpLoading(false);
+    }
+  };
+
+  const handleVerifyOtp = async () => {
+    if (!otpCode.trim()) {
+      toast.error('Vui lòng nhập mã OTP.');
+      return;
+    }
+
+    setOtpVerifying(true);
+    try {
+      const result = await verifyPhoneOtp(confirmationResult, otpCode.trim());
+      setFirebaseIdToken(result.idToken);
+      setVerifiedPhone(form.phone);
+      toast.success('Số điện thoại đã được xác thực.');
+    } catch (err) {
+      toast.error(getOtpErrorMessage(err));
+    } finally {
+      setOtpVerifying(false);
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (form.password !== form.confirm_password) {
       toast.error('Mật khẩu xác nhận không khớp!');
+      return;
+    }
+    if (!isPhoneVerified) {
+      toast.error('Vui lòng xác thực số điện thoại bằng OTP trước khi đăng ký.');
       return;
     }
     setLoading(true);
@@ -30,6 +115,8 @@ export default function RegisterPage() {
       const res = await axios.post('/api/auth/register', {
         ...form,
         area_name: selectedArea?.old_name || selectedArea?.current_name || '',
+        firebase_id_token: firebaseIdToken,
+        phone_verified: true,
       });
 
       if (res.data?.success) {
@@ -61,9 +148,9 @@ export default function RegisterPage() {
     }}>
       <div style={{ width: '100%', maxWidth: 520 }}>
         <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
-          <img src="/logo.svg" alt="Cong thong tin cuu ho ngap lu" className="login-brand-logo mobile" />
-          <h1 style={{ fontFamily: "'Lora', serif", color: '#2a2520', fontSize: '1.45rem', fontWeight: 600, letterSpacing: '-0.01em' }}>CUU HO NGAP LU</h1>
-          <p style={{ color: '#9e9282', fontSize: '0.78rem', marginTop: 4 }}>CONG DANG KY NHAN CANH BAO LU & HO TRO</p>
+          <img src="/logo.svg" alt="Cổng thông tin cứu hộ ngập lụt" className="login-brand-logo mobile" />
+          <h1 style={{ fontFamily: "'Lora', serif", color: '#2a2520', fontSize: '1.45rem', fontWeight: 600, letterSpacing: '-0.01em' }}>CỨU HỘ NGẬP LỤT</h1>
+          <p style={{ color: '#9e9282', fontSize: '0.78rem', marginTop: 4 }}>CỔNG ĐĂNG KÝ NHẬN CẢNH BÁO LŨ & HỖ TRỢ</p>
         </div>
 
         <div style={{
@@ -85,9 +172,43 @@ export default function RegisterPage() {
               </div>
               <div>
                 <label className="form-label">Số điện thoại *</label>
-                <input className="form-input" placeholder="Số điện thoại" value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} required />
+                <input className="form-input" placeholder="Số điện thoại" value={form.phone} onChange={handlePhoneChange} required />
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ width: '100%', marginTop: 8, justifyContent: 'center', padding: '0.5rem' }}
+                  onClick={handleSendOtp}
+                  disabled={otpLoading || loading || !form.phone || isPhoneVerified}
+                >
+                  {isPhoneVerified ? 'Đã xác thực SĐT' : otpLoading ? 'Đang gửi OTP...' : 'Gửi mã OTP'}
+                </button>
               </div>
             </div>
+
+            <div id="recaptcha-container" />
+
+            {confirmationResult && !isPhoneVerified && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                <div>
+                  <label className="form-label">Mã OTP *</label>
+                  <input
+                    className="form-input"
+                    placeholder="Nhập mã OTP Firebase"
+                    value={otpCode}
+                    onChange={e => setOtpCode(e.target.value)}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  style={{ alignSelf: 'end', padding: '0.65rem 0.85rem' }}
+                  onClick={handleVerifyOtp}
+                  disabled={otpVerifying || loading}
+                >
+                  {otpVerifying ? 'Đang xác thực...' : 'Xác thực'}
+                </button>
+              </div>
+            )}
 
             <div style={{ marginBottom: '0.75rem' }}>
               <label className="form-label">Email</label>

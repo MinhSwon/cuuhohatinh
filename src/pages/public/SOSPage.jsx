@@ -96,7 +96,7 @@ export default function SOSPage() {
   const submitRequest = async () => {
     const area = AREAS.find(a => a.id === areaId);
     const isRemoteReport = requesterType !== 'SELF';
-    const victimDisplayName = isRemoteReport ? (victimName || 'Nguoi can cuu ho') : 'Nguoi dung SOS';
+    const victimDisplayName = isRemoteReport ? (victimName || 'Người cần cứu hộ') : 'Người dùng SOS';
     const victimContactPhone = isRemoteReport ? victimPhone : phone;
     const victimLat = isRemoteReport ? null : (gps?.lat || null);
     const victimLng = isRemoteReport ? null : (gps?.lon || null);
@@ -108,13 +108,13 @@ export default function SOSPage() {
       area_id: areaId || '',
       area_name: area?.old_name || 'Chua xac dinh',
       address_detail: addressNote || (gps && !isRemoteReport ? `GPS: ${gps.lat.toFixed(5)}, ${gps.lon.toFixed(5)}` : 'Can xac minh vi tri'),
-      description: `SOS khan cap qua nut SOS. Loai: ${selectedType?.label}. ${isRemoteReport ? 'Nguoi bao ho dang bao thay nguoi than. ' : ''}${addressNote ? 'Ghi chu: ' + addressNote : ''}`,
+      description: `SOS khẩn cấp qua nút SOS. Loại: ${selectedType?.label}. ${isRemoteReport ? 'Người báo hộ đang báo thay người thân. ' : ''}${addressNote ? 'Ghi chú: ' + addressNote : ''}`,
       latitude: victimLat,
       longitude: victimLng,
       requester_type: requesterType,
-      reporter_name: isRemoteReport ? (reporterName || 'Nguoi bao ho') : victimDisplayName,
+      reporter_name: isRemoteReport ? (reporterName || 'Người báo hộ') : victimDisplayName,
       reporter_phone: phone,
-      reporter_relationship: isRemoteReport ? 'Bao ho nguoi than' : 'SELF',
+      reporter_relationship: isRemoteReport ? 'Báo hộ người thân' : 'SELF',
       reporter_latitude: reporterLat,
       reporter_longitude: reporterLng,
       victim_name: victimDisplayName,
@@ -198,8 +198,8 @@ export default function SOSPage() {
       {/* Header */}
       <div style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 10 }}>
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', textDecoration: 'none' }}>
-          <img src="/logo.svg" alt="Cong thong tin cuu ho ngap lu" className="brand-logo-image compact" />
-          <span style={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: 600 }}>CUU HO NGAP LU</span>
+          <img src="/logo.svg" alt="Cổng thông tin cứu hộ ngập lụt" className="brand-logo-image compact" />
+          <span style={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: 600 }}>CỨU HỘ NGẬP LỤT</span>
         </Link>
         <Link to="/login" style={{ color: '#64748b', fontSize: '0.75rem', textDecoration: 'none' }}>Đăng nhập</Link>
       </div>
@@ -296,7 +296,7 @@ export default function SOSPage() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1rem' }}>
               {[
                 { value: 'SELF', label: 'Toi can cuu' },
-                { value: 'RELATIVE', label: 'Bao ho nguoi than' },
+                { value: 'RELATIVE', label: 'Báo hộ người thân' },
               ].map(option => (
                 <button
                   key={option.value}
@@ -322,7 +322,7 @@ export default function SOSPage() {
               <div style={{ display: 'grid', gap: '0.625rem', marginBottom: '1rem', textAlign: 'left' }}>
                 <input
                   type="text"
-                  placeholder="Ten nguoi can cuu"
+                  placeholder="Tên người cần cứu"
                   value={victimName}
                   onChange={e => setVictimName(e.target.value)}
                   style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, padding: '0.625rem 0.875rem', color: 'white', fontSize: '0.85rem', outline: 'none' }}
@@ -330,20 +330,20 @@ export default function SOSPage() {
                 <input
                   type="tel"
                   inputMode="numeric"
-                  placeholder="So dien thoai nguoi can cuu neu co"
+                  placeholder="Số điện thoại người cần cứu nếu có"
                   value={victimPhone}
                   onChange={e => setVictimPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
                   style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, padding: '0.625rem 0.875rem', color: 'white', fontSize: '0.85rem', outline: 'none' }}
                 />
                 <input
                   type="text"
-                  placeholder="Ten nguoi bao neu muon de lai"
+                  placeholder="Tên người báo nếu muốn để lại"
                   value={reporterName}
                   onChange={e => setReporterName(e.target.value)}
                   style={{ width: '100%', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 10, padding: '0.625rem 0.875rem', color: 'white', fontSize: '0.85rem', outline: 'none' }}
                 />
                 <p style={{ color: '#fbbf24', fontSize: '0.68rem', lineHeight: 1.5, margin: 0 }}>
-                  GPS hien tai chi duoc luu la vi tri nguoi bao. Hay nhap khu vuc va dia chi cua nguoi can cuu o buoc tiep theo.
+                  GPS hiện tại chỉ được lưu là vị trí người báo. Hãy nhập khu vực và địa chỉ của người cần cứu ở bước tiếp theo.
                 </p>
               </div>
             )}

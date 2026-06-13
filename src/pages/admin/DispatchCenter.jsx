@@ -297,7 +297,7 @@ export default function DispatchCenter() {
               <Marker key={request.id} position={[position.lat, position.lng]} icon={createRescuePointIcon('PENDING', '⏳')}>
                 <Popup>
                   <div style={{ fontSize: '0.82rem' }}>
-                    <div style={{ fontWeight: 700, color: '#dc2626' }}>Dang cho phan cong: {getRequestName(request)}</div>
+                    <div style={{ fontWeight: 700, color: '#dc2626' }}>Đang chờ phân công: {getRequestName(request)}</div>
                     <div style={{ color: '#64748b', marginTop: 4 }}>{getRequestAddress(request)}</div>
                     <div style={{ marginTop: 4 }}><LevelBadge level={request.emergency_level} /></div>
                     {isNeedsVerification(request) && <div style={{ marginTop: 4, color: '#dc2626', fontWeight: 700 }}>Can xac minh vi tri</div>}
@@ -316,8 +316,8 @@ export default function DispatchCenter() {
                       <div style={{ fontWeight: 700, color: '#dc2626' }}>🆘 {m.victim_name}</div>
                       <div style={{ color: '#64748b', marginTop: 4 }}>{m.victim_address}</div>
                       <div style={{ marginTop: 4 }}><StatusBadge status={m.status} /></div>
-                      <div style={{ marginTop: 4, color: '#2563eb', fontWeight: 700 }}>Da co doi {m.team_name} phu trach</div>
-                      {m.linked_mission_id && <div style={{ marginTop: 4, color: '#7c3aed' }}>Ho tro/cum voi: {m.linked_mission_id}</div>}
+                      <div style={{ marginTop: 4, color: '#2563eb', fontWeight: 700 }}>Đã có đội {m.team_name} phụ trách</div>
+                      {m.linked_mission_id && <div style={{ marginTop: 4, color: '#7c3aed' }}>Hỗ trợ/cụm với: {m.linked_mission_id}</div>}
                     </div>
                   </Popup>
                 </Marker>
@@ -356,8 +356,8 @@ export default function DispatchCenter() {
           }}>
             <div style={{ fontWeight: 700, marginBottom: '0.5rem', color: '#0f172a' }}>Chú thích bản đồ</div>
             {[
-              { icon: '⏳', label: 'Yeu cau cho phan cong', color: '#dc2626' },
-              { icon: '🆘', label: 'Da co doi phu trach', color: '#2563eb' },
+              { icon: '⏳', label: 'Yêu cầu chờ phân công', color: '#dc2626' },
+              { icon: '🆘', label: 'Đã có đội phụ trách', color: '#2563eb' },
               { icon: '➕', label: 'Nhiem vu ho tro/cum', color: '#7c3aed' },
               { icon: '🛡️', label: 'Đội cứu hộ', color: '#10b981' },
               { icon: '🏫', label: 'Điểm sơ tán', color: '#3b82f6' },

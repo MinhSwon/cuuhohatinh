@@ -891,7 +891,7 @@ export const SMS_LOGS = [
   {
     id: 'sms-1',
     phone: '0967890123',
-    message: 'CANH BAO: Lu Khan Cap tai Ha Linh. Nuoc dang dang cao. Hay di tan len cao ngay!',
+    message: 'CẢNH BÁO: Lũ khẩn cấp tại Hà Linh. Nước đang dâng cao. Hãy di tản lên cao ngay!',
     provider: 'Viettel SMS',
     status: 'SENT',
     cost: 500,
@@ -902,7 +902,7 @@ export const SMS_LOGS = [
   {
     id: 'sms-2',
     phone: '0990123456',
-    message: 'CANH BAO: Lu Khan Cap tai Ha Linh. Nuoc dang dang cao. Hay di tan len cao ngay!',
+    message: 'CẢNH BÁO: Lũ khẩn cấp tại Hà Linh. Nước đang dâng cao. Hãy di tản lên cao ngay!',
     provider: 'Viettel SMS',
     status: 'SENT',
     cost: 500,
@@ -913,7 +913,7 @@ export const SMS_LOGS = [
   {
     id: 'sms-3',
     phone: '0956789012',
-    message: 'FLOODGUARD: Yeu cau cuu ho cua ban (Ma: RR-0003) da duoc tiep nhan. Doi cuu ho dang tren duong.',
+    message: 'FLOODGUARD: Yêu cầu cứu hộ của bạn (Mã: RR-0003) đã được tiếp nhận. Đội cứu hộ đang trên đường.',
     provider: 'Viettel SMS',
     status: 'SENT',
     cost: 500,
@@ -924,7 +924,7 @@ export const SMS_LOGS = [
   {
     id: 'sms-4',
     phone: '0901111222',
-    message: 'FLOODGUARD: Doi cuu ho da hoan thanh cuu ho thanh cong. Cam on ban da tin tuong vao he thong.',
+    message: 'FLOODGUARD: Đội cứu hộ đã hoàn thành cứu hộ thành công. Cảm ơn bạn đã tin tưởng vào hệ thống.',
     provider: 'Viettel SMS',
     status: 'SENT',
     cost: 500,
@@ -935,7 +935,7 @@ export const SMS_LOGS = [
   {
     id: 'sms-5',
     phone: '0999888777',
-    message: 'CANH BAO: Lu cao tai Huong Khê.',
+    message: 'CẢNH BÁO: Lũ cao tại Hương Khê.',
     provider: 'Viettel SMS',
     status: 'FAILED',
     cost: 0,

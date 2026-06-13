@@ -113,7 +113,7 @@ function BrandMark() {
   return (
     <img
       src="/logo.svg"
-      alt="Cong thong tin cuu ho ngap lu"
+      alt="Cổng thông tin cứu hộ ngập lụt"
       className="brand-logo-image compact"
     />
   );
@@ -134,8 +134,8 @@ export function AdminSidebar({ isOpen, onClose }) {
         <div className="sidebar-logo">
           <BrandMark />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="sidebar-logo-title">CUU HO NGAP LU</div>
-            <div className="sidebar-logo-subtitle">Cong thong tin</div>
+            <div className="sidebar-logo-title">CỨU HỘ NGẬP LỤT</div>
+            <div className="sidebar-logo-subtitle">Cổng thông tin</div>
           </div>
           <button onClick={onClose} style={{ color: '#6b6360', background: 'none', border: 'none', cursor: 'pointer', flexShrink: 0 }}>
             <X size={16} />
@@ -212,8 +212,8 @@ export function RescueSidebar({ isOpen, onClose }) {
         <div className="sidebar-logo" style={{ borderColor: 'rgba(255,255,255,0.06)' }}>
           <BrandMark />
           <div style={{ flex: 1 }}>
-            <div className="sidebar-logo-title">DOI CUU HO</div>
-            <div className="sidebar-logo-subtitle">Cuu ho ngap lu</div>
+            <div className="sidebar-logo-title">ĐỘI CỨU HỘ</div>
+            <div className="sidebar-logo-subtitle">Cứu hộ ngập lụt</div>
           </div>
         </div>
 
@@ -258,8 +258,8 @@ export function CitizenSidebar({ isOpen, onClose }) {
         <div className="sidebar-logo">
           <BrandMark />
           <div style={{ flex: 1 }}>
-            <div className="sidebar-logo-title">CUU HO NGAP LU</div>
-            <div className="sidebar-logo-subtitle">Cong nguoi dan</div>
+            <div className="sidebar-logo-title">CỨU HỘ NGẬP LỤT</div>
+            <div className="sidebar-logo-subtitle">Cổng người dân</div>
           </div>
         </div>
 

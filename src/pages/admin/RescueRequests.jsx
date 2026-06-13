@@ -50,7 +50,7 @@ function AssignModal({ request, teams, missions = [], onAssign, onClose }) {
             <div style={{ display: 'grid', gap: '0.5rem', marginBottom: '1rem' }}>
               {request.requester_type !== 'SELF' && (
                 <div style={{ padding: '0.65rem', borderRadius: 8, background: '#fffbeb', color: '#92400e', fontSize: '0.72rem' }}>
-                  Bao ho: {request.reporter_name || 'Nguoi bao'} - {request.reporter_phone || 'chua co SDT'}
+                  Báo hộ: {request.reporter_name || 'Người báo'} - {request.reporter_phone || 'chưa có SĐT'}
                 </div>
               )}
               {warnings.map((warning, index) => (
@@ -91,7 +91,7 @@ function AssignModal({ request, teams, missions = [], onAssign, onClose }) {
                     </div>
                     <div style={{ fontSize: '0.7rem', color: '#64748b' }}>👤 {team.leader_name} · 📞 {team.phone} · {team.member_count} thành viên</div>
                     <div style={{ fontSize: '0.68rem', color: overCapacity ? '#dc2626' : '#64748b', marginTop: 2 }}>
-                      Tai hien tai: {activeCount}/{maxActive} nhiem vu dang xu ly - {distanceLabel}
+                      Tải hiện tại: {activeCount}/{maxActive} nhiệm vụ đang xử lý - {distanceLabel}
                     </div>
                   </div>
                   <StatusBadge status={team.status} />
@@ -233,12 +233,12 @@ export default function RescueRequests() {
   const handleAssign = async (teamId, warnings = []) => {
     const team = rescueTeams.find(t => t.id === teamId);
     if (warnings.length > 0) {
-      const ok = window.confirm(`Co ${warnings.length} canh bao dieu phoi. Ban van muon phan cong ${team?.team_name}?`);
+      const ok = window.confirm(`Có ${warnings.length} cảnh báo điều phối. Bạn vẫn muốn phân công ${team?.team_name}?`);
       if (!ok) return;
     }
     const result = await assignTeamToRequest(assignModal.id, teamId, team?.team_name, currentUser);
     if (result?.assignment_warnings?.length) {
-      toast.warning(`Kem ${result.assignment_warnings.length} canh bao dieu phoi.`);
+      toast.warning(`Kèm ${result.assignment_warnings.length} cảnh báo điều phối.`);
     }
     toast.success(`Đã phân công ${team?.team_name} cho ${assignModal.full_name}!`);
     setAssignModal(null);
@@ -277,7 +277,7 @@ export default function RescueRequests() {
           { label: 'Cứu thành công', count: rescueRequests.filter(r => ['RESCUED','TRANSFERRED_SAFEZONE'].includes(r.status)).length, color: '#10b981', bg: '#f0fdf4' },
           { label: '🆘 SOS chờ xử lý', count: sosCount, color: '#dc2626', bg: '#fef2f2' },
           { label: 'Can xac minh', count: rescueRequests.filter(isNeedsVerification).length, color: '#d97706', bg: '#fffbeb' },
-          { label: 'Gan nhiem vu khac', count: rescueRequests.filter(r => r.nearby_active_mission_id || r.duplicate_group_id).length, color: '#7c3aed', bg: '#f5f3ff' },
+          { label: 'Gần nhiệm vụ khác', count: rescueRequests.filter(r => r.nearby_active_mission_id || r.duplicate_group_id).length, color: '#7c3aed', bg: '#f5f3ff' },
         ].map(s => (
           <div key={s.label} style={{ background: s.bg, border: `1px solid ${s.color}20`, borderRadius: 10, padding: '0.75rem', textAlign: 'center' }}>
             <div style={{ fontSize: '1.5rem', fontWeight: 800, color: s.color }}>{s.count}</div>
@@ -377,7 +377,7 @@ export default function RescueRequests() {
                     </div>
                     <a href={`tel:${r.phone}`} style={{ fontSize: '0.72rem', color: '#3b82f6', textDecoration: 'none' }}>{r.phone}</a>
                     <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>👥 {r.number_of_people} người</div>
-                    {r.requester_type !== 'SELF' && <div style={{ fontSize: '0.66rem', color: '#92400e', fontWeight: 700 }}>Bao ho: {r.reporter_phone || 'chua co SDT'}</div>}
+                    {r.requester_type !== 'SELF' && <div style={{ fontSize: '0.66rem', color: '#92400e', fontWeight: 700 }}>Báo hộ: {r.reporter_phone || 'chưa có SĐT'}</div>}
                     {isNeedsVerification(r) && <div style={{ fontSize: '0.66rem', color: '#dc2626', fontWeight: 700 }}>Can xac minh vi tri</div>}
                   </td>
                   <td style={{ fontSize: '0.75rem' }}>

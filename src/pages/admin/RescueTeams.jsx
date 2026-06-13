@@ -47,7 +47,7 @@ function TeamForm({ initial, onSave, onClose }) {
           <input type="number" min="1" className="form-input" value={form.max_active_missions || 2} onChange={e => setForm(f => ({ ...f, max_active_missions: parseInt(e.target.value) }))} />
         </div>
         <div>
-          <label className="form-label">Suc cho moi chuyen</label>
+          <label className="form-label">Sức chở mỗi chuyến</label>
           <input type="number" min="1" className="form-input" value={form.max_people_per_trip || form.vehicle_capacity || 1} onChange={e => setForm(f => ({ ...f, max_people_per_trip: parseInt(e.target.value), vehicle_capacity: parseInt(e.target.value) }))} />
         </div>
         <div>
@@ -166,7 +166,7 @@ export default function RescueTeams() {
                 </div>
 
                 <div style={{ background: activeMissions >= (team.max_active_missions || 2) ? '#fef2f2' : '#eff6ff', borderRadius: 8, padding: '0.625rem', marginBottom: '1rem', fontSize: '0.78rem', color: activeMissions >= (team.max_active_missions || 2) ? '#b91c1c' : '#1d4ed8', fontWeight: 700 }}>
-                  Tai dieu phoi: {activeMissions}/{team.max_active_missions || 2} nhiem vu dang xu ly · Suc cho: {team.max_people_per_trip || team.vehicle_capacity || 'chua cau hinh'} nguoi/chuyen
+                  Tải điều phối: {activeMissions}/{team.max_active_missions || 2} nhiệm vụ đang xử lý · Sức chở: {team.max_people_per_trip || team.vehicle_capacity || 'chưa cấu hình'} người/chuyến
                 </div>
 
                 {/* Performance */}
