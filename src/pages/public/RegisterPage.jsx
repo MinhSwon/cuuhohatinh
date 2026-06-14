@@ -24,6 +24,7 @@ function getOtpErrorMessage(err) {
   if (code.includes('too-many-requests')) return 'Gửi OTP quá nhiều lần. Vui lòng đợi một lúc rồi thử lại.';
   if (code.includes('invalid-verification-code')) return 'Mã OTP không đúng. Vui lòng kiểm tra lại.';
   if (code.includes('captcha-check-failed')) return 'reCAPTCHA không hợp lệ. Tải lại trang và thử lại.';
+  if (code.includes('billing-not-enabled')) return 'Firebase chưa bật Billing/Blaze nên không gửi được SMS thật. Hãy dùng số test hoặc liên kết tài khoản thanh toán.';
   if (code.includes('internal-error')) return 'Firebase chưa gửi được OTP. Hãy kiểm tra Phone provider, Authorized domains, SMS region policy và cấu hình Billing/Blaze trong Firebase Console.';
   return err?.message || 'Không gửi/xác thực được OTP Firebase.';
 }

@@ -90,6 +90,8 @@ app.use(helmet({
         'https://identitytoolkit.googleapis.com',
         'https://securetoken.googleapis.com',
         'https://www.googleapis.com',
+        'https://www.google.com',
+        'https://www.recaptcha.net',
       ],
       frameSrc: ["'self'", 'https://www.google.com', 'https://www.recaptcha.net'],
       frameAncestors: ["'none'"],
