@@ -13,6 +13,7 @@ import {
   getRequestName,
   isNeedsVerification,
 } from '../../utils/rescueCoordination';
+import { HA_TINH_MAP_BOUNDS, HA_TINH_MAP_CENTER, getHaTinhMapCenter, isInHaTinhBounds } from '../../utils/haTinhMap';
 import {
   Navigation, CheckCircle, AlertTriangle, Phone, MapPin, Clock, Activity,
   ChevronRight, Filter, Maximize2, Send, X, User
@@ -64,11 +65,11 @@ const STATUS_COLORS = {
   NEED_SUPPORT: '#f97316', CANCELLED: '#6b7280',
 };
 
-const DEFAULT_MAP_CENTER = [18.183, 105.733];
 const isValidCoordinate = value => typeof value === 'number' && Number.isFinite(value);
 const hasLatLng = (lat, lng) => isValidCoordinate(lat) && isValidCoordinate(lng);
-const missionHasVictimLocation = mission => hasLatLng(mission?.victim_latitude, mission?.victim_longitude);
-const missionHasRescuerLocation = mission => hasLatLng(mission?.current_rescuer_latitude, mission?.current_rescuer_longitude);
+const hasHaTinhLatLng = (lat, lng) => hasLatLng(lat, lng) && isInHaTinhBounds(lat, lng);
+const missionHasVictimLocation = mission => hasHaTinhLatLng(mission?.victim_latitude, mission?.victim_longitude);
+const missionHasRescuerLocation = mission => hasHaTinhLatLng(mission?.current_rescuer_latitude, mission?.current_rescuer_longitude);
 
 function MapUpdater({ center }) {
   const map = useMap();
@@ -84,22 +85,22 @@ export default function DispatchCenter() {
   const toast = useToast();
   const [filterStatus, setFilterStatus] = useState('');
   const [selectedMission, setSelectedMission] = useState(null);
-  const [mapCenter, setMapCenter] = useState(DEFAULT_MAP_CENTER);
+  const [mapCenter, setMapCenter] = useState(HA_TINH_MAP_CENTER);
   const [showFilter, setShowFilter] = useState(false);
 
   const activeMissions = rescueMissions.filter(m => !['RESCUED', 'TRANSFERRED_SAFEZONE', 'CANCELLED'].includes(m.status));
   const displayMissions = filterStatus ? rescueMissions.filter(m => m.status === filterStatus) : rescueMissions;
-  const safeZonesWithLocation = safeZones.filter(sz => hasLatLng(sz.latitude, sz.longitude));
+  const safeZonesWithLocation = safeZones.filter(sz => hasHaTinhLatLng(sz.latitude, sz.longitude));
   const missionsWithVictimLocation = rescueMissions.filter(missionHasVictimLocation);
   const pendingRequestsWithLocation = rescueRequests
     .filter(request => request.status === 'PENDING')
     .map(request => ({ request, position: getRequestLatLng(request) }))
-    .filter(item => item.position);
+    .filter(item => item.position && isInHaTinhBounds(item.position.lat, item.position.lng));
 
   const handleSelectMission = (mission) => {
     setSelectedMission(mission);
     if (missionHasVictimLocation(mission)) {
-      setMapCenter([mission.victim_latitude, mission.victim_longitude]);
+      setMapCenter(getHaTinhMapCenter(mission.victim_latitude, mission.victim_longitude));
     }
   };
 
@@ -272,7 +273,15 @@ export default function DispatchCenter() {
 
         {/* Right - Map */}
         <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0', position: 'relative' }}>
-          <MapContainer center={mapCenter} zoom={13} style={{ height: '100%', width: '100%' }} zoomControl={true}>
+          <MapContainer
+            center={mapCenter}
+            zoom={11}
+            minZoom={9}
+            maxBounds={HA_TINH_MAP_BOUNDS}
+            maxBoundsViscosity={1}
+            style={{ height: '100%', width: '100%' }}
+            zoomControl={true}
+          >
             <TileLayer
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
               url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"

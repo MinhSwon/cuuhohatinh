@@ -1,13 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import axios from 'axios';
 import { AREAS } from '../data/publicData';
-import {
-  getAssignmentWarnings,
-  getRequestAddress,
-  getRequestName,
-  getRequestPhone,
-  getTeamMaxActiveMissions,
-} from '../utils/rescueCoordination';
 
 const DataContext = createContext(null);
 const shouldUseOfflineFallback = (err) => !err.response;
@@ -246,70 +239,10 @@ export function DataProvider({ children }) {
       if (dbRes.data.rescueTeams) setRescueTeams(dbRes.data.rescueTeams);
       return res.data;
     } catch (err) {
-      if (!shouldUseOfflineFallback(err)) throw err;
-      setRescueRequests(prev => prev.map(r => r.id === requestId
-        ? { ...r, assigned_team_id: teamId, assigned_team_name: teamName, status: 'ASSIGNED', accepted_at: new Date().toISOString() }
-        : r
-      ));
-      const request = rescueRequests.find(r => r.id === requestId);
-      if (request) {
-        const team = rescueTeams.find(t => t.id === teamId);
-        const assignmentWarnings = getAssignmentWarnings(request, rescueMissions, rescueTeams, teamId);
-        const mission = {
-          id: `rm-${Date.now()}`,
-          rescue_request_id: requestId,
-          rescue_team_id: teamId,
-          team_name: teamName,
-          mission_type: request.nearby_active_mission_id ? 'SUPPORT_OR_CLUSTER' : 'PRIMARY',
-          cluster_id: request.cluster_id || null,
-          linked_mission_id: request.nearby_active_mission_id || null,
-          victim_name: getRequestName(request),
-          victim_phone: getRequestPhone(request),
-          victim_latitude: request.victim_latitude ?? request.latitude,
-          victim_longitude: request.victim_longitude ?? request.longitude,
-          victim_address: getRequestAddress(request),
-          current_rescuer_latitude: null,
-          current_rescuer_longitude: null,
-          checkin_radius_meters: 100,
-          max_gps_accuracy_meters: 50,
-          min_stay_seconds: 60,
-          status: 'ASSIGNED',
-          assigned_at: new Date().toISOString(),
-          accepted_at: null,
-          started_at: null,
-          auto_arrival_detected: false,
-          auto_arrival_time: null,
-          auto_arrival_distance_meters: null,
-          manual_arrival_confirmed: false,
-          manual_arrival_time: null,
-          manual_arrival_by: null,
-          rescued_people_count: null,
-          destination_safe_zone_id: null,
-          completed_at: null,
-          completion_note: '',
-          area_id: request.victim_area_id || request.area_id,
-          area_name: request.victim_area_name || request.area_name,
-          assignment_warnings: assignmentWarnings,
-          created_at: new Date().toISOString(),
-        };
-        setRescueMissions(prev => [mission, ...prev]);
-        setRescueTeams(prev => prev.map(item => {
-          if (item.id !== teamId) return item;
-          const currentActive = Number(item.current_active_missions || 0) + 1;
-          const maxActive = getTeamMaxActiveMissions(item);
-          return {
-            ...item,
-            current_active_missions: currentActive,
-            status: currentActive >= maxActive ? 'BUSY' : item.status,
-          };
-        }));
-        addLog(currentUser?.id, currentUser?.full_name, 'Phân công đội cứu hộ', 'rescue_requests', requestId, `Phân công ${teamName}`);
-        addNotification('user-rescue-1', 'Nhiệm vụ mới!', `Bạn được phân công cứu hộ ${request.full_name}`, 'MISSION_ASSIGNED', mission.id);
-        return { success: true, request, mission, assignment_warnings: assignmentWarnings, offline: true };
-      }
-      return { success: false, offline: true };
+      console.error('Assign rescue request failed:', err);
+      throw err;
     }
-  }, [rescueRequests, rescueMissions, rescueTeams, addLog, addNotification]);
+  }, []);
 
   // Mission updates
   const updateMissionStatus = useCallback(async (missionId, newStatus, extraData = {}, changedByType = 'RESCUE_TEAM', changedByUser = null, note = '') => {

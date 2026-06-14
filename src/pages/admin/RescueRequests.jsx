@@ -236,12 +236,18 @@ export default function RescueRequests() {
       const ok = window.confirm(`Có ${warnings.length} cảnh báo điều phối. Bạn vẫn muốn phân công ${team?.team_name}?`);
       if (!ok) return;
     }
-    const result = await assignTeamToRequest(assignModal.id, teamId, team?.team_name, currentUser);
-    if (result?.assignment_warnings?.length) {
-      toast.warning(`Kèm ${result.assignment_warnings.length} cảnh báo điều phối.`);
+    try {
+      const result = await assignTeamToRequest(assignModal.id, teamId, team?.team_name, currentUser);
+      if (result?.assignment_warnings?.length) {
+        toast.warning(`Kèm ${result.assignment_warnings.length} cảnh báo điều phối.`);
+      }
+      toast.success(`Đã phân công ${team?.team_name} cho ${assignModal.full_name}!`);
+      setAssignModal(null);
+    } catch (err) {
+      const message = err.response?.data?.message || err.response?.data?.error || 'Không phân công được. Yêu cầu có thể đã được đội khác nhận, vui lòng tải lại.';
+      toast.error(message);
+      setAssignModal(null);
     }
-    toast.success(`Đã phân công ${team?.team_name} cho ${assignModal.full_name}!`);
-    setAssignModal(null);
   };
 
   const handleCancel = (r) => {

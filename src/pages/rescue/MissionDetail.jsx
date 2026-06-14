@@ -7,6 +7,7 @@ import { haversineDistance, formatDistance } from '../../utils/haversine';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { CheckCircle, X, Phone, MapPin, Navigation, Activity, AlertTriangle, Clock } from 'lucide-react';
+import { HA_TINH_MAP_BOUNDS, HA_TINH_MAP_CENTER, getHaTinhMapCenter, hasValidLatLng, isInHaTinhBounds } from '../../utils/haTinhMap';
 
 const victimIcon = L.divIcon({
   className: '',
@@ -22,7 +23,9 @@ const myIcon = L.divIcon({
 
 function MapCenter({ pos }) {
   const map = useMap();
-  useEffect(() => { if (pos) map.setView(pos, 15); }, [pos]);
+  useEffect(() => {
+    if (pos && isInHaTinhBounds(pos[0], pos[1])) map.setView(pos, 15);
+  }, [pos, map]);
   return null;
 }
 
@@ -51,8 +54,16 @@ export default function MissionDetail() {
   const missions = rescueMissions.filter(m => m.rescue_team_id === myTeam?.id && !['CANCELLED', 'UNREACHABLE'].includes(m.status));
   const activeMissions = missions.filter(m => !['RESCUED', 'TRANSFERRED_SAFEZONE'].includes(m.status));
   const selectedMission = missions.find(m => m.id === selectedMissionId) || activeMissions[0];
+  const missionHasVictimLocation = selectedMission
+    ? hasValidLatLng(selectedMission.victim_latitude, selectedMission.victim_longitude)
+      && isInHaTinhBounds(selectedMission.victim_latitude, selectedMission.victim_longitude)
+    : false;
+  const victimMapCenter = missionHasVictimLocation
+    ? getHaTinhMapCenter(selectedMission.victim_latitude, selectedMission.victim_longitude)
+    : HA_TINH_MAP_CENTER;
+  const myPosInHaTinh = myPos && isInHaTinhBounds(myPos[0], myPos[1]);
 
-  const distance = myPos && selectedMission
+  const distance = myPosInHaTinh && selectedMission && missionHasVictimLocation
     ? haversineDistance(myPos[0], myPos[1], selectedMission.victim_latitude, selectedMission.victim_longitude)
     : null;
 
@@ -253,16 +264,27 @@ export default function MissionDetail() {
 
           {/* Map */}
           <div style={{ borderRadius: 12, overflow: 'hidden', border: '1px solid #e2e8f0', minHeight: 500 }}>
-            <MapContainer center={[selectedMission.victim_latitude, selectedMission.victim_longitude]} zoom={15} style={{ height: '100%', minHeight: 500, width: '100%' }}>
+            <MapContainer
+              center={victimMapCenter}
+              zoom={missionHasVictimLocation ? 15 : 11}
+              minZoom={9}
+              maxBounds={HA_TINH_MAP_BOUNDS}
+              maxBoundsViscosity={1}
+              style={{ height: '100%', minHeight: 500, width: '100%' }}
+            >
               <TileLayer attribution='&copy; OpenStreetMap' url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-              {myPos && <MapCenter pos={myPos} />}
+              {myPosInHaTinh && <MapCenter pos={myPos} />}
 
-              <Marker position={[selectedMission.victim_latitude, selectedMission.victim_longitude]} icon={victimIcon}>
-                <Popup><div style={{ fontSize: '0.82rem' }}><strong>🆘 {selectedMission.victim_name}</strong><br />{selectedMission.victim_address}</div></Popup>
-              </Marker>
-              <Circle center={[selectedMission.victim_latitude, selectedMission.victim_longitude]} radius={selectedMission.checkin_radius_meters} pathOptions={{ color: '#f97316', fillColor: '#f97316', fillOpacity: 0.1, dashArray: '5,5' }} />
+              {missionHasVictimLocation && (
+                <>
+                  <Marker position={[selectedMission.victim_latitude, selectedMission.victim_longitude]} icon={victimIcon}>
+                    <Popup><div style={{ fontSize: '0.82rem' }}><strong>🆘 {selectedMission.victim_name}</strong><br />{selectedMission.victim_address}</div></Popup>
+                  </Marker>
+                  <Circle center={[selectedMission.victim_latitude, selectedMission.victim_longitude]} radius={selectedMission.checkin_radius_meters} pathOptions={{ color: '#f97316', fillColor: '#f97316', fillOpacity: 0.1, dashArray: '5,5' }} />
+                </>
+              )}
 
-              {myPos && (
+              {myPosInHaTinh && (
                 <Marker position={myPos} icon={myIcon}>
                   <Popup><div style={{ fontSize: '0.82rem' }}>📍 Vị trí của bạn</div></Popup>
                 </Marker>

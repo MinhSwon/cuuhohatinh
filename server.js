@@ -5,7 +5,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
@@ -62,6 +62,7 @@ const pool = DATABASE_URL
   : null;
 let writeQueue = Promise.resolve();
 const sseClients = new Map();
+const assignmentLocks = new Set();
 
 app.disable('x-powered-by');
 app.set('trust proxy', 1);
@@ -122,6 +123,14 @@ const authRateLimit = parsePositiveInt(
 const publicWriteRateLimit = parsePositiveInt(
   process.env.PUBLIC_WRITE_RATE_LIMIT,
   IS_DEPLOYED_RUNTIME ? 300 : 300
+);
+const rescueRequestRateLimit = parsePositiveInt(
+  process.env.RESCUE_REQUEST_RATE_LIMIT,
+  IS_DEPLOYED_RUNTIME ? 5 : 100
+);
+const rescueRequestRateWindowMinutes = parsePositiveInt(
+  process.env.RESCUE_REQUEST_RATE_WINDOW_MINUTES,
+  30
 );
 const ESMS_API_KEY = process.env.ESMS_API_KEY || '';
 const ESMS_SECRET_KEY = process.env.ESMS_SECRET_KEY || '';
@@ -524,6 +533,13 @@ function getTeamActiveMissionCount(teamId) {
   ).length;
 }
 
+function findActiveMissionByRequestId(requestId) {
+  if (!requestId || !Array.isArray(db.rescueMissions)) return null;
+  return db.rescueMissions.find(mission =>
+    mission.rescue_request_id === requestId && ACTIVE_RESCUE_STATUSES.has(mission.status)
+  ) || null;
+}
+
 function getTeamMaxActiveMissions(team) {
   const configured = Number.parseInt(team?.max_active_missions, 10);
   if (Number.isFinite(configured) && configured > 0) return configured;
@@ -590,6 +606,23 @@ function normalizeVietnamPhone(phone) {
   return digits;
 }
 
+const rescueRequestLimiter = rateLimit({
+  windowMs: rescueRequestRateWindowMinutes * 60 * 1000,
+  limit: rescueRequestRateLimit,
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    const phone = normalizeVietnamPhone(
+      req.body?.victim_phone || req.body?.phone || req.body?.reporter_phone
+    );
+    return phone ? `phone:${phone}` : ipKeyGenerator(req.ip);
+  },
+  message: {
+    success: false,
+    message: 'So dien thoai nay gui qua nhieu yeu cau cuu ho. Vui long goi truc tiep doi dieu phoi neu la tinh huong khan cap.',
+  },
+});
+
 function maskPhone(phone) {
   const normalized = normalizeVietnamPhone(phone);
   if (normalized.length < 6) return normalized;
@@ -610,6 +643,16 @@ function getEsmsCallbackUrl(requestId) {
 
 function hasEsmsSmsConfig() {
   return Boolean(ESMS_API_KEY && ESMS_SECRET_KEY && ESMS_BRANDNAME);
+}
+
+function getEsmsMissingConfig() {
+  return [
+    ['ESMS_API_KEY', ESMS_API_KEY],
+    ['ESMS_SECRET_KEY', ESMS_SECRET_KEY],
+    ['ESMS_BRANDNAME', ESMS_BRANDNAME],
+  ]
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
 }
 
 function hasEsmsZaloConfig(templateId) {
@@ -1661,6 +1704,31 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+app.get('/api/readiness', async (req, res) => {
+  const startedAt = Date.now();
+
+  try {
+    if (pool) {
+      await pool.query('SELECT 1');
+    }
+
+    res.json({
+      ready: true,
+      database: pool ? 'postgresql' : 'json-file',
+      latency_ms: Date.now() - startedAt,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err) {
+    res.status(503).json({
+      ready: false,
+      database: 'postgresql',
+      error: err.message,
+      latency_ms: Date.now() - startedAt,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
+
 // 1. GET ALL DATABASE STATE (Sync on page load)
 app.get('/api/db', authenticateOptional, async (req, res) => {
   if (req.authError) {
@@ -2068,7 +2136,7 @@ app.delete('/api/warnings/:id', requireRoles(ADMIN_ROLES), (req, res) => {
 });
 
 // 5. RESCUE REQUESTS & MISSIONS
-app.post('/api/rescue-requests', publicWriteLimiter, authenticateOptional, async (req, res) => {
+app.post('/api/rescue-requests', publicWriteLimiter, rescueRequestLimiter, authenticateOptional, async (req, res) => {
   try {
     const data = enrichRescueRequestCoordination(
       normalizeRescueRequestInput(pickAllowed(req.body, RESCUE_REQUEST_PUBLIC_FIELDS), req.user)
@@ -2185,38 +2253,91 @@ app.put('/api/rescue-requests/:id', requireRoles([...ADMIN_ROLES, ...RESCUE_ROLE
   res.json(db.rescueRequests[idx]);
 });
 
-app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), (req, res) => {
+app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), async (req, res) => {
   const { id } = req.params;
   const { teamId, teamName } = pickAllowed(req.body, ['teamId', 'teamName']);
   const currentUser = req.user;
-  
-  const reqIdx = db.rescueRequests.findIndex(r => r.id === id);
-  if (reqIdx === -1) return res.status(404).json({ error: 'Request not found' });
 
-  const request = db.rescueRequests[reqIdx];
-  const team = db.rescueTeams.find(t => t.id === teamId);
-  const resolvedTeamName = teamName || team?.team_name || team?.name || 'Doi cuu ho';
-  const assignmentWarnings = getAssignmentWarnings(request, team);
-  request.status = 'ASSIGNED';
-  request.assigned_team_id = teamId;
-  request.assigned_team_name = resolvedTeamName;
-  request.accepted_at = new Date().toISOString();
-  request.updated_at = new Date().toISOString();
-  if (pool) {
-    pool.query(
-      `UPDATE rescue_requests
-       SET status = 'ASSIGNED'::"RescueRequestStatus",
-           assigned_team_id = $1,
-           assigned_team_name = $2,
-           accepted_at = $3,
-           updated_at = NOW()
-       WHERE id = $4`,
-      [teamId || null, resolvedTeamName, toPgTimestamp(request.accepted_at), id]
-    ).catch(err => console.error('Failed to persist rescue assignment:', err));
+  if (assignmentLocks.has(id)) {
+    return res.status(409).json({
+      error: 'Request is being assigned',
+      message: 'Yeu cau nay dang duoc phan cong boi mot thao tac khac. Vui long tai lai.',
+    });
   }
 
+  assignmentLocks.add(id);
+  
+  try {
+    const reqIdx = db.rescueRequests.findIndex(r => r.id === id);
+    if (reqIdx === -1) return res.status(404).json({ error: 'Request not found' });
+
+    const request = db.rescueRequests[reqIdx];
+    const existingMission = findActiveMissionByRequestId(id);
+    if (existingMission || request.status !== 'PENDING') {
+      return res.status(409).json({
+        error: 'Request already assigned',
+        message: 'Yeu cau nay da duoc phan cong hoac khong con o trang thai cho xu ly.',
+        request,
+        mission: existingMission,
+      });
+    }
+
+    const team = db.rescueTeams.find(t => t.id === teamId);
+    const resolvedTeamName = teamName || team?.team_name || team?.name || 'Doi cuu ho';
+    const assignmentWarnings = getAssignmentWarnings(request, team);
+    const acceptedAt = new Date().toISOString();
+
+    if (pool) {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const lockedResult = await client.query(
+          `SELECT status::text
+           FROM rescue_requests
+           WHERE id = $1
+           FOR UPDATE`,
+          [id]
+        );
+        if (lockedResult.rowCount === 0) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'Request not found' });
+        }
+        if (lockedResult.rows[0].status !== 'PENDING') {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            error: 'Request already assigned',
+            message: 'Yeu cau nay da duoc phan cong trong database. Vui long tai lai.',
+            request,
+            mission: existingMission,
+          });
+        }
+        await client.query(
+          `UPDATE rescue_requests
+           SET status = 'ASSIGNED'::"RescueRequestStatus",
+               assigned_team_id = $1,
+               assigned_team_name = $2,
+               accepted_at = $3,
+               updated_at = NOW()
+           WHERE id = $4`,
+          [teamId || null, resolvedTeamName, toPgTimestamp(acceptedAt), id]
+        );
+        await client.query('COMMIT');
+      } catch (err) {
+        await client.query('ROLLBACK');
+        throw err;
+      } finally {
+        client.release();
+      }
+    }
+
+    request.status = 'ASSIGNED';
+    request.assigned_team_id = teamId;
+    request.assigned_team_name = resolvedTeamName;
+    request.accepted_at = acceptedAt;
+    request.updated_at = new Date().toISOString();
+
   // Create corresponding mission
-  const mission = {
+    const mission = {
     id: createId('rm'),
     rescue_request_id: id,
     rescue_team_id: teamId,
@@ -2254,11 +2375,11 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), (req, res
     created_at: new Date().toISOString()
   };
   
-  db.rescueMissions.unshift(mission);
-  syncTeamLoad(teamId);
+    db.rescueMissions.unshift(mission);
+    syncTeamLoad(teamId);
 
   // Add activity log
-  const log = {
+    const log = {
     id: createId('al'),
     user_id: currentUser?.id || null,
     user_name: currentUser?.full_name || 'Hệ thống',
@@ -2268,13 +2389,13 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), (req, res
     note: `Phân công ${teamName}`,
     created_at: new Date().toISOString()
   };
-  log.user_name = currentUser?.full_name || 'He thong';
-  log.action = 'Phan cong doi cuu ho';
-  log.note = `Phan cong ${resolvedTeamName}${assignmentWarnings.length ? ` - ${assignmentWarnings.length} canh bao dieu phoi` : ''}`;
-  db.activityLogs.unshift(log);
+    log.user_name = currentUser?.full_name || 'He thong';
+    log.action = 'Phan cong doi cuu ho';
+    log.note = `Phan cong ${resolvedTeamName}${assignmentWarnings.length ? ` - ${assignmentWarnings.length} canh bao dieu phoi` : ''}`;
+    db.activityLogs.unshift(log);
 
   // Add notification for team
-  const notif = {
+    const notif = {
     id: createId('notif'),
     user_id: 'user-rescue-1', // Default lead
     title: 'Nhiệm vụ mới!',
@@ -2284,28 +2405,34 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), (req, res
     created_at: new Date().toISOString(),
     related_id: mission.id
   };
-  notif.user_id = team?.leader_user_id || team?.leader_id || 'user-rescue-1';
-  notif.title = 'Nhiem vu moi!';
-  notif.message = `Ban duoc phan cong cuu ho ${request.victim_name || request.full_name}`;
-  db.notifications.unshift(notif);
+    notif.user_id = team?.leader_user_id || team?.leader_id || 'user-rescue-1';
+    notif.title = 'Nhiem vu moi!';
+    notif.message = `Ban duoc phan cong cuu ho ${request.victim_name || request.full_name}`;
+    db.notifications.unshift(notif);
 
-  if (request.user_id || request.created_by_user_id) {
-    db.notifications.unshift({
-      id: createId('notif'),
-      user_id: request.user_id || request.created_by_user_id,
-      title: 'Da co doi dang den',
-      message: `${resolvedTeamName} da nhan yeu cau cuu ho. Hay giu dien thoai de doi lien he.`,
-      type: 'RESCUE_REQUEST_ASSIGNED',
-      is_read: false,
-      created_at: new Date().toISOString(),
-      related_id: request.id,
-    });
+    if (request.user_id || request.created_by_user_id) {
+      db.notifications.unshift({
+        id: createId('notif'),
+        user_id: request.user_id || request.created_by_user_id,
+        title: 'Da co doi dang den',
+        message: `${resolvedTeamName} da nhan yeu cau cuu ho. Hay giu dien thoai de doi lien he.`,
+        type: 'RESCUE_REQUEST_ASSIGNED',
+        is_read: false,
+        created_at: new Date().toISOString(),
+        related_id: request.id,
+      });
+    }
+
+    saveDb();
+    broadcastDbUpdate('rescue-request:assigned', ['rescueRequests', 'rescueMissions', 'rescueTeams', 'activityLogs', 'notifications']);
+    fireAndForgetNotification(() => notifyRescueAssigned(request, resolvedTeamName), 'Rescue assignment notification');
+    res.json({ success: true, request, mission, assignment_warnings: assignmentWarnings, rescueTeams: db.rescueTeams });
+  } catch (err) {
+    console.error('Failed to assign rescue request:', err);
+    res.status(500).json({ error: 'Failed to assign rescue request' });
+  } finally {
+    assignmentLocks.delete(id);
   }
-
-  saveDb();
-  broadcastDbUpdate('rescue-request:assigned', ['rescueRequests', 'rescueMissions', 'rescueTeams', 'activityLogs', 'notifications']);
-  fireAndForgetNotification(() => notifyRescueAssigned(request, resolvedTeamName), 'Rescue assignment notification');
-  res.json({ success: true, request, mission, assignment_warnings: assignmentWarnings, rescueTeams: db.rescueTeams });
 });
 
 // 6. UPDATE MISSION STATUS (and link request status)
@@ -2490,13 +2617,16 @@ app.put('/api/vulnerable-households/:id', requireRoles(ADMIN_ROLES), (req, res) 
 });
 
 app.get('/api/notifications/provider-status', requireRoles(ADMIN_ROLES), (req, res) => {
+  const missingEnv = getEsmsMissingConfig();
   res.json({
     provider: 'eSMS',
-    sms_configured: hasEsmsSmsConfig(),
+    sms_configured: missingEnv.length === 0,
     zalo_configured: Boolean(hasEsmsSmsConfig() && ZALO_OA_ID),
     sandbox: ESMS_SANDBOX === '1',
     brandname_configured: Boolean(ESMS_BRANDNAME),
     callback_configured: Boolean(ESMS_CALLBACK_URL),
+    missing_env: missingEnv,
+    coordinator_phone_count: RESCUE_COORDINATOR_PHONES.length,
   });
 });
 
@@ -2508,6 +2638,7 @@ app.post('/api/sms/send', requireRoles(ADMIN_ROLES), async (req, res) => {
     return res.status(503).json({
       error: 'eSMS is not configured',
       required_env: ['ESMS_API_KEY', 'ESMS_SECRET_KEY', 'ESMS_BRANDNAME'],
+      missing_env: getEsmsMissingConfig(),
     });
   }
 
