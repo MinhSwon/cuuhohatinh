@@ -5,6 +5,8 @@ import { useToast } from '../../contexts/ToastContext';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, MapPin, Send } from 'lucide-react';
 import { AREAS } from '../../data/publicData';
+import OfflineStatusBanner from '../../components/common/OfflineStatusBanner';
+import EmergencyFallbackActions from '../../components/common/EmergencyFallbackActions';
 
 export default function RescueRequest() {
   const { currentUser } = useAuth();
@@ -38,7 +40,17 @@ export default function RescueRequest() {
   });
   const [step, setStep] = useState(1);
   const [submitted, setSubmitted] = useState(false);
+  const [submittedRequest, setSubmittedRequest] = useState(null);
   const [loading, setLoading] = useState(false);
+  const selectedArea = AREAS.find(a => a.id === form.area_id);
+  const fallbackPayload = {
+    ...form,
+    area_name: selectedArea?.old_name || '',
+    victim_area_name: selectedArea?.old_name || '',
+    victim_address_detail: form.address_detail,
+    victim_latitude: form.latitude,
+    victim_longitude: form.longitude,
+  };
 
   const getLocation = () => {
     if (navigator.geolocation) {
@@ -76,6 +88,7 @@ export default function RescueRequest() {
     };
     try {
       const req = await createRescueRequest(payload);
+      setSubmittedRequest(req);
       addNotification(null, '🆘 Yêu cầu cứu hộ mới!', `${form.full_name} cần hỗ trợ tại ${area?.old_name}`, 'RESCUE_REQUEST', req.id);
       setSubmitted(true);
     } catch (err) {
@@ -97,6 +110,12 @@ export default function RescueRequest() {
           <p style={{ fontSize: '0.88rem', color: '#64748b', marginBottom: '1.5rem' }}>
             Đội cứu hộ sẽ liên hệ với bạn trong thời gian sớm nhất. Hãy ở yên tại chỗ và giữ điện thoại.
           </p>
+          {submittedRequest?.offline_status === 'QUEUED' && (
+            <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '0.875rem', marginBottom: '1rem', color: '#92400e', fontSize: '0.82rem', fontWeight: 700 }}>
+              Đã lưu tạm trên thiết bị. Yêu cầu sẽ tự gửi lại khi có internet.
+            </div>
+          )}
+          <EmergencyFallbackActions payload={submittedRequest || fallbackPayload} />
           <div style={{ background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 10, padding: '1rem', marginBottom: '1.5rem' }}>
             <p style={{ fontSize: '0.82rem', fontWeight: 600, color: '#dc2626', marginBottom: '0.5rem' }}>🚨 Trong khi chờ đợi:</p>
             <ul style={{ fontSize: '0.78rem', color: '#b91c1c', textAlign: 'left', paddingLeft: '1.25rem' }}>
@@ -107,7 +126,7 @@ export default function RescueRequest() {
             </ul>
           </div>
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
-            <button className="btn btn-secondary" onClick={() => { setSubmitted(false); setForm(f => ({ ...f, description: '' })); }}>Gửi yêu cầu khác</button>
+            <button className="btn btn-secondary" onClick={() => { setSubmitted(false); setSubmittedRequest(null); setForm(f => ({ ...f, description: '' })); }}>Gửi yêu cầu khác</button>
             <button className="btn btn-primary" onClick={() => navigate('/citizen')}>Về trang chủ</button>
           </div>
         </div>
@@ -126,9 +145,12 @@ export default function RescueRequest() {
         </div>
       </div>
 
+      <OfflineStatusBanner />
+
       <div className="card" style={{ maxWidth: 640, margin: '0 auto' }}>
         <form onSubmit={handleSubmit}>
           <div style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <EmergencyFallbackActions payload={fallbackPayload} />
             {/* Urgency */}
             <div>
               <label className="form-label">Mức độ khẩn cấp *</label>

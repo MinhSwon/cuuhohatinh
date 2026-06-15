@@ -1,6 +1,12 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import axios from 'axios';
 import { AREAS } from '../data/publicData';
+import {
+  enqueueOfflineAction,
+  getOfflineQueue,
+  removeOfflineAction,
+  updateOfflineAction,
+} from '../lib/offlineQueue';
 
 const DataContext = createContext(null);
 const shouldUseOfflineFallback = (err) => !err.response;
@@ -8,8 +14,11 @@ const shouldUseOfflineFallback = (err) => !err.response;
 function getEventStreamUrl(token) {
   const apiBaseUrl = axios.defaults.baseURL || '';
   const url = new URL('/api/events', apiBaseUrl || window.location.origin);
-  if (token) url.searchParams.set('token', token);
   return url.toString();
+}
+
+function hasLocalSession() {
+  return Boolean(localStorage.getItem('currentUser'));
 }
 
 export function DataProvider({ children }) {
@@ -30,7 +39,10 @@ export function DataProvider({ children }) {
   const [activityLogs, setActivityLogs] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [dbSynced, setDbSynced] = useState(false);
-  const [eventStreamToken, setEventStreamToken] = useState(() => localStorage.getItem('authToken') || '');
+  const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
+  const [offlineQueueCount, setOfflineQueueCount] = useState(0);
+  const [offlineSyncing, setOfflineSyncing] = useState(false);
+  const [sessionKey, setSessionKey] = useState(() => localStorage.getItem('currentUser') || '');
 
   const applyBackendState = useCallback((data) => {
     if (data.areas) setAreas(data.areas);
@@ -56,6 +68,7 @@ export function DataProvider({ children }) {
   useEffect(() => {
     async function syncWithBackend() {
       try {
+        if (!hasLocalSession()) return;
         const res = await axios.get('/api/db');
         applyBackendState(res.data);
       } catch (err) {
@@ -63,12 +76,13 @@ export function DataProvider({ children }) {
       }
     }
     syncWithBackend();
-  }, [applyBackendState]);
+  }, [applyBackendState, sessionKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof EventSource === 'undefined') return undefined;
+    if (!sessionKey) return undefined;
 
-    const events = new EventSource(getEventStreamUrl(eventStreamToken));
+    const events = new EventSource(getEventStreamUrl(), { withCredentials: true });
 
     const handleDbUpdate = (event) => {
       try {
@@ -88,21 +102,102 @@ export function DataProvider({ children }) {
       events.removeEventListener('db:update', handleDbUpdate);
       events.close();
     };
-  }, [applyBackendState, eventStreamToken]);
+  }, [applyBackendState, sessionKey]);
 
   useEffect(() => {
-    const syncToken = () => {
-      setEventStreamToken(localStorage.getItem('authToken') || '');
+    const syncSession = () => {
+      setSessionKey(localStorage.getItem('currentUser') || '');
     };
 
-    window.addEventListener('storage', syncToken);
-    const tokenPoll = window.setInterval(syncToken, 1000);
+    window.addEventListener('storage', syncSession);
+    const sessionPoll = window.setInterval(syncSession, 1000);
 
     return () => {
-      window.removeEventListener('storage', syncToken);
-      window.clearInterval(tokenPoll);
+      window.removeEventListener('storage', syncSession);
+      window.clearInterval(sessionPoll);
     };
   }, []);
+
+  const refreshOfflineQueueCount = useCallback(async () => {
+    try {
+      const items = await getOfflineQueue();
+      setOfflineQueueCount(items.filter(item => item.status === 'PENDING' || item.status === 'FAILED').length);
+    } catch (err) {
+      console.warn('Cannot read offline queue.', err);
+    }
+  }, []);
+
+  const syncOfflineQueue = useCallback(async () => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+    setOfflineSyncing(true);
+    try {
+      const items = (await getOfflineQueue())
+        .filter(item => item.status === 'PENDING' || item.status === 'FAILED')
+        .sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
+
+      for (const item of items) {
+        try {
+          await updateOfflineAction(item.id, { status: 'SYNCING', attempts: (item.attempts || 0) + 1, last_error: '' });
+
+          if (item.type === 'CREATE_RESCUE_REQUEST') {
+            await axios.post('/api/rescue-requests', item.payload);
+          } else if (item.type === 'UPDATE_MISSION_STATUS') {
+            await axios.post(`/api/missions/${item.payload.missionId}/status`, {
+              newStatus: item.payload.newStatus,
+              extraData: item.payload.extraData || {},
+              changedByType: item.payload.changedByType || 'RESCUE_TEAM',
+              changedByUser: item.payload.changedByUser || null,
+              note: item.payload.note || '',
+            });
+          }
+
+          await removeOfflineAction(item.id);
+        } catch (err) {
+          await updateOfflineAction(item.id, {
+            status: 'FAILED',
+            last_error: err?.message || 'Sync failed',
+          });
+          if (!shouldUseOfflineFallback(err)) {
+            console.warn('Offline queue item failed with server response.', err);
+          }
+          break;
+        }
+      }
+
+      if (hasLocalSession()) {
+        const res = await axios.get('/api/db');
+        applyBackendState(res.data);
+      }
+    } catch (err) {
+      if (!shouldUseOfflineFallback(err)) {
+        console.warn('Offline queue sync failed.', err);
+      }
+    } finally {
+      setOfflineSyncing(false);
+      refreshOfflineQueueCount();
+    }
+  }, [applyBackendState, refreshOfflineQueueCount]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncOfflineQueue();
+    };
+    const handleOffline = () => setIsOnline(false);
+    const handleQueueChanged = () => refreshOfflineQueueCount();
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('offline-queue:changed', handleQueueChanged);
+    refreshOfflineQueueCount();
+    if (navigator.onLine) syncOfflineQueue();
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('offline-queue:changed', handleQueueChanged);
+    };
+  }, [refreshOfflineQueueCount, syncOfflineQueue]);
 
   const addLog = useCallback((userId, userName, action, tableName, recordId, note) => {
     const log = {
@@ -198,10 +293,13 @@ export function DataProvider({ children }) {
       return rr;
     } catch (err) {
       if (!shouldUseOfflineFallback(err)) throw err;
+      const queued = await enqueueOfflineAction('CREATE_RESCUE_REQUEST', data, { source: 'createRescueRequest' });
       const rr = {
-        id: `rr-${Date.now()}`,
+        id: queued.id,
         ...data,
         status: 'PENDING',
+        offline_status: 'QUEUED',
+        offline_queue_id: queued.id,
         assigned_team_id: null,
         assigned_team_name: null,
         created_at: new Date().toISOString(),
@@ -261,6 +359,14 @@ export function DataProvider({ children }) {
       if (dbRes.data.rescueTeams) setRescueTeams(dbRes.data.rescueTeams);
     } catch (err) {
       if (!shouldUseOfflineFallback(err)) throw err;
+      await enqueueOfflineAction('UPDATE_MISSION_STATUS', {
+        missionId,
+        newStatus,
+        extraData,
+        changedByType,
+        changedByUser,
+        note,
+      }, { source: 'updateMissionStatus' });
       setRescueMissions(prev => prev.map(m => {
         if (m.id !== missionId) return m;
         const oldStatus = m.status;
@@ -503,6 +609,10 @@ export function DataProvider({ children }) {
       activityLogs, setActivityLogs,
       notifications, setNotifications,
       dbSynced,
+      isOnline,
+      offlineQueueCount,
+      offlineSyncing,
+      syncOfflineQueue,
       // Actions
       addLog, addNotification, markNotificationRead,
       searchSemantics,

@@ -30,6 +30,7 @@ const PORT = process.env.PORT || 5000;
 const DATABASE_URL = process.env.DATABASE_URL || '';
 const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('base64url');
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
+const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'fg_session';
 const IS_DEPLOYED_RUNTIME = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
 const DB_CONNECT_RETRIES = Number(process.env.DB_CONNECT_RETRIES || 8);
 const DB_CONNECT_RETRY_DELAY_MS = Number(process.env.DB_CONNECT_RETRY_DELAY_MS || 3000);
@@ -109,6 +110,7 @@ app.use(cors({
     console.warn(`CORS blocked origin: ${origin}`);
     return callback(null, false);
   },
+  credentials: true,
 }));
 app.use(express.json({ limit: '1mb' }));
 
@@ -1223,14 +1225,47 @@ function issueToken(user) {
   );
 }
 
+function getCookieValue(req, name) {
+  const cookieHeader = req.get('cookie') || '';
+  const cookies = cookieHeader.split(';').map(item => item.trim()).filter(Boolean);
+  for (const cookie of cookies) {
+    const separatorIndex = cookie.indexOf('=');
+    if (separatorIndex === -1) continue;
+    const key = cookie.slice(0, separatorIndex);
+    if (key === name) return decodeURIComponent(cookie.slice(separatorIndex + 1));
+  }
+  return '';
+}
+
+function authCookieOptions() {
+  return {
+    httpOnly: true,
+    secure: IS_DEPLOYED_RUNTIME,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 8 * 60 * 60 * 1000,
+  };
+}
+
+function setAuthCookie(res, token) {
+  res.cookie(AUTH_COOKIE_NAME, token, authCookieOptions());
+}
+
+function clearAuthCookie(res) {
+  res.clearCookie(AUTH_COOKIE_NAME, {
+    httpOnly: true,
+    secure: IS_DEPLOYED_RUNTIME,
+    sameSite: 'lax',
+    path: '/',
+  });
+}
+
 function findUserById(id) {
   return (Array.isArray(db.users) ? db.users : []).find(user => user.id === id);
 }
 
 function getRequestToken(req) {
-  const authHeader = req.get('authorization') || '';
-  if (authHeader.startsWith('Bearer ')) return authHeader.slice(7);
-  return typeof req.query?.token === 'string' ? req.query.token : '';
+  return getCookieValue(req, AUTH_COOKIE_NAME);
 }
 
 function authenticateOptional(req, res, next) {
@@ -1729,8 +1764,8 @@ app.get('/api/readiness', async (req, res) => {
   }
 });
 
-// 1. GET ALL DATABASE STATE (Sync on page load)
-app.get('/api/db', authenticateOptional, async (req, res) => {
+// 1. GET AUTHENTICATED DATABASE STATE (Sync on page load)
+app.get('/api/db', requireAuth, async (req, res) => {
   if (req.authError) {
     return res.status(401).json({ error: 'Invalid or expired token' });
   }
@@ -1746,7 +1781,7 @@ app.get('/api/db', authenticateOptional, async (req, res) => {
   }
 });
 
-app.get('/api/events', authenticateOptional, async (req, res) => {
+app.get('/api/events', requireAuth, async (req, res) => {
   if (req.authError) {
     return res.status(401).end();
   }
@@ -1852,8 +1887,9 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
 
     const userForClient = safeUser(user);
     const token = issueToken(user);
+    setAuthCookie(res, token);
 
-    return res.json({ success: true, user: userForClient, profile: profile || null, token });
+    return res.json({ success: true, user: userForClient, profile: profile || null });
   } catch (err) {
     console.error('Login route failed:', err);
     return res.status(500).json({
@@ -1861,6 +1897,11 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       message: 'May chu dang loi dang nhap, vui long thu lai'
     });
   }
+});
+
+app.post('/api/auth/logout', (req, res) => {
+  clearAuthCookie(res);
+  res.json({ success: true });
 });
 
 app.post('/api/auth/register', publicWriteLimiter, async (req, res) => {
@@ -2739,6 +2780,10 @@ app.put('/api/notifications/:id/read', requireAuth, (req, res) => {
     broadcastDbUpdate('notification:read', ['notifications']);
   }
   res.json({ success: true });
+});
+
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'API endpoint not found' });
 });
 
 // Serve the production React build from the same domain as the API.

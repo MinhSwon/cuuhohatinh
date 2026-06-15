@@ -8,6 +8,7 @@ import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-le
 import L from 'leaflet';
 import { CheckCircle, X, Phone, MapPin, Navigation, Activity, AlertTriangle, Clock } from 'lucide-react';
 import { HA_TINH_MAP_BOUNDS, HA_TINH_MAP_CENTER, getHaTinhMapCenter, hasValidLatLng, isInHaTinhBounds } from '../../utils/haTinhMap';
+import OfflineStatusBanner from '../../components/common/OfflineStatusBanner';
 
 const victimIcon = L.divIcon({
   className: '',
@@ -49,6 +50,7 @@ export default function MissionDetail() {
   const [showCompleteModal, setShowCompleteModal] = useState(false);
   const [tracking, setTracking] = useState(false);
   const watchIdRef = useRef(null);
+  const lastQueuedGpsRef = useRef(0);
 
   const myTeam = rescueTeams.find(t => t.leader_user_id === currentUser?.id) || rescueTeams[0];
   const missions = rescueMissions.filter(m => m.rescue_team_id === myTeam?.id && !['CANCELLED', 'UNREACHABLE'].includes(m.status));
@@ -90,6 +92,28 @@ export default function MissionDetail() {
     if (watchIdRef.current) navigator.geolocation.clearWatch(watchIdRef.current);
     setTracking(false);
   };
+
+  useEffect(() => {
+    if (!tracking || !myPos || !selectedMission) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine) return;
+
+    const now = Date.now();
+    if (now - lastQueuedGpsRef.current < 30000) return;
+    lastQueuedGpsRef.current = now;
+
+    updateMissionStatus(
+      selectedMission.id,
+      selectedMission.status,
+      {
+        current_rescuer_latitude: myPos[0],
+        current_rescuer_longitude: myPos[1],
+        gps_saved_offline: true,
+      },
+      'RESCUE_TEAM',
+      currentUser?.id,
+      'Lưu tạm vị trí GPS khi mất mạng'
+    );
+  }, [tracking, myPos, selectedMission, updateMissionStatus, currentUser?.id]);
 
   // Simulate approaching
   const simulateApproach = () => {
@@ -160,6 +184,7 @@ export default function MissionDetail() {
           <button className="btn btn-primary" onClick={startTracking}><Navigation size={16} /> Bật GPS tracking</button>
         )}
       </div>
+      <OfflineStatusBanner />
 
       {/* Mission selector */}
       {activeMissions.length > 1 && (

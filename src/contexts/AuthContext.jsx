@@ -27,10 +27,6 @@ export function AuthProvider({ children }) {
     try {
       const res = await axios.post('/api/auth/login', { emailOrPhone, password });
       if (res.data.success) {
-        if (res.data.token) {
-          localStorage.setItem('authToken', res.data.token);
-          axios.defaults.headers.common.Authorization = `Bearer ${res.data.token}`;
-        }
         setCurrentUser(res.data.user);
         setCurrentProfile(res.data.profile);
         localStorage.setItem('currentUser', JSON.stringify(res.data.user));
@@ -47,11 +43,14 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try {
+      await axios.post('/api/auth/logout');
+    } catch (err) {
+      console.warn('Logout request failed; clearing local session anyway.', err);
+    }
     setCurrentUser(null);
     setCurrentProfile(null);
-    delete axios.defaults.headers.common.Authorization;
-    localStorage.removeItem('authToken');
     localStorage.removeItem('currentUser');
     localStorage.removeItem('currentProfile');
   }, []);

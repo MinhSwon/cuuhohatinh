@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { AlertTriangle, Phone, MapPin, Loader, CheckCircle, X, ChevronDown } from 'lucide-react';
 import { AREAS } from '../../data/publicData';
+import OfflineStatusBanner from '../../components/common/OfflineStatusBanner';
+import EmergencyFallbackActions from '../../components/common/EmergencyFallbackActions';
 
 const EMERGENCY_TYPES = [
   { emoji: '🏠', label: 'Nhà bị ngập', desc: 'Nước dâng vào nhà' },
@@ -35,6 +37,22 @@ export default function SOSPage() {
   const [countdown, setCountdown] = useState(null);
   const [sendError, setSendError] = useState('');
   const timerRef = useRef(null);
+  const currentArea = AREAS.find(a => a.id === areaId);
+  const emergencyPayload = {
+    full_name: requesterType !== 'SELF' ? (victimName || 'Nguoi can cuu ho') : 'Nguoi dung SOS',
+    phone: requesterType !== 'SELF' ? (victimPhone || phone) : phone,
+    victim_name: requesterType !== 'SELF' ? (victimName || 'Nguoi can cuu ho') : 'Nguoi dung SOS',
+    victim_phone: requesterType !== 'SELF' ? (victimPhone || phone) : phone,
+    area_name: currentArea?.old_name || '',
+    victim_area_name: currentArea?.old_name || '',
+    address_detail: addressNote || '',
+    victim_address_detail: addressNote || '',
+    number_of_people: peopleCount,
+    latitude: gps?.lat || null,
+    longitude: gps?.lon || null,
+    victim_latitude: requesterType === 'SELF' ? (gps?.lat || null) : null,
+    victim_longitude: requesterType === 'SELF' ? (gps?.lon || null) : null,
+  };
 
   // Auto-grab GPS when entering LOCATION step
   useEffect(() => {
@@ -210,6 +228,7 @@ export default function SOSPage() {
         {/* ── STEP: TYPE ── */}
         {step === 'TYPE' && (
           <div style={{ width: '100%', maxWidth: 420, textAlign: 'center' }}>
+            <OfflineStatusBanner dark />
             <div style={{ marginBottom: '1.5rem' }}>
               <div style={{
                 width: 80, height: 80, borderRadius: '50%', margin: '0 auto 1rem',
@@ -260,12 +279,14 @@ export default function SOSPage() {
                 <a href="tel:115" style={{ color: '#f87171', fontWeight: 800, textDecoration: 'none' }}>115</a>
               </p>
             </div>
+            <EmergencyFallbackActions payload={emergencyPayload} dark compact />
           </div>
         )}
 
         {/* ── STEP: PHONE ── */}
         {step === 'PHONE' && (
           <div style={{ width: '100%', maxWidth: 380, textAlign: 'center', animation: 'fadeUp 0.3s ease' }}>
+            <OfflineStatusBanner dark />
             <button onClick={() => setStep('TYPE')} style={{ color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8rem', margin: '0 auto 1.5rem' }}>
               ← Quay lại
             </button>
@@ -379,6 +400,8 @@ export default function SOSPage() {
         {/* ── STEP: LOCATION ── */}
         {step === 'LOCATION' && (
           <div style={{ width: '100%', maxWidth: 380, textAlign: 'center', animation: 'fadeUp 0.3s ease' }}>
+            <OfflineStatusBanner dark />
+            <EmergencyFallbackActions payload={emergencyPayload} dark compact />
             <button onClick={() => setStep('PHONE')} style={{ color: '#64748b', background: 'none', border: 'none', cursor: 'pointer', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.8rem', margin: '0 auto 1.5rem' }}>
               ← Quay lại
             </button>
@@ -511,6 +534,7 @@ export default function SOSPage() {
         {/* ── STEP: DONE ── */}
         {step === 'DONE' && (
           <div style={{ textAlign: 'center', maxWidth: 400, animation: 'fadeUp 0.4s ease' }}>
+            <OfflineStatusBanner dark />
             <div style={{ width: 100, height: 100, borderRadius: '50%', background: 'rgba(16,185,129,0.15)', border: '3px solid rgba(16,185,129,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1.5rem' }}>
               <CheckCircle size={52} color="#34d399" />
             </div>
@@ -521,6 +545,13 @@ export default function SOSPage() {
               Yêu cầu cứu hộ của bạn đã được tiếp nhận.<br />
               Đội cứu hộ đang được điều phối ngay lập tức.
             </p>
+
+            {result?.offline_status === 'QUEUED' && (
+              <div style={{ background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.35)', borderRadius: 12, padding: '0.875rem', marginBottom: '1rem', color: '#fde68a', fontSize: '0.82rem', fontWeight: 800 }}>
+                Đã lưu tạm trên thiết bị. Yêu cầu sẽ tự gửi lại khi có internet. Nếu còn sóng di động, hãy gọi hoặc gửi SMS dự phòng bên dưới.
+              </div>
+            )}
+            <EmergencyFallbackActions payload={result || emergencyPayload} dark compact />
 
             <div style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 14, padding: '1.25rem', marginBottom: '1.5rem', textAlign: 'left' }}>
               <div style={{ color: '#64748b', fontSize: '0.68rem', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.75rem' }}>Thông tin yêu cầu</div>
