@@ -564,6 +564,26 @@ function syncTeamLoad(teamId) {
   return team;
 }
 
+function createAdminNotifications(title, message, type, relatedId = null) {
+  const admins = Array.isArray(db.users)
+    ? db.users.filter(user => ADMIN_ROLES.includes(user.role) && user.status !== 'BLOCKED')
+    : [];
+  const createdAt = new Date().toISOString();
+  const notifications = admins.map(admin => ({
+    id: createId('notif'),
+    user_id: admin.id,
+    title,
+    message,
+    type,
+    is_read: false,
+    created_at: createdAt,
+    related_id: relatedId,
+  }));
+
+  db.notifications.unshift(...notifications);
+  return notifications;
+}
+
 function getAssignmentWarnings(request, team) {
   const warnings = [];
   if (request?.nearby_active_mission_id) {
@@ -2506,6 +2526,17 @@ app.post('/api/missions/:id/status', requireRoles([...ADMIN_ROLES, ...RESCUE_ROL
   };
   db.missionStatusLogs.push(logEntry);
 
+  if (newStatus === 'NEED_SUPPORT' || newStatus === 'UNREACHABLE') {
+    const updatedMission = db.rescueMissions[missionIdx];
+    const title = newStatus === 'NEED_SUPPORT'
+      ? '🆘 Đội cứu hộ yêu cầu hỗ trợ thêm'
+      : '📵 Đội cứu hộ báo không liên lạc được';
+    const message = newStatus === 'NEED_SUPPORT'
+      ? `Đội ${updatedMission.team_name || mission.team_name || 'cứu hộ'} cần hỗ trợ thêm cho nạn nhân ${updatedMission.victim_name || mission.victim_name || 'chưa rõ'}.`
+      : `Đội ${updatedMission.team_name || mission.team_name || 'cứu hộ'} không liên lạc được với nạn nhân ${updatedMission.victim_name || mission.victim_name || 'chưa rõ'}.`;
+    createAdminNotifications(title, message, newStatus, id);
+  }
+
   // Update request status
   const reqIdx = db.rescueRequests.findIndex(r => r.id === mission.rescue_request_id);
   if (reqIdx !== -1) {
@@ -2527,7 +2558,7 @@ app.post('/api/missions/:id/status', requireRoles([...ADMIN_ROLES, ...RESCUE_ROL
   syncTeamLoad(mission.rescue_team_id);
 
   saveDb();
-  broadcastDbUpdate('mission:status-updated', ['rescueMissions', 'rescueRequests', 'rescueTeams', 'missionStatusLogs']);
+  broadcastDbUpdate('mission:status-updated', ['rescueMissions', 'rescueRequests', 'rescueTeams', 'missionStatusLogs', 'notifications']);
   res.json({ success: true, mission: db.rescueMissions[missionIdx], rescueTeams: db.rescueTeams });
 });
 
