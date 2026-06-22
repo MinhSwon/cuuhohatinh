@@ -55,7 +55,7 @@ const defaultAllowedOrigins = [
 ];
 const corsAllowedOrigins = new Set([...defaultAllowedOrigins, ...allowedOrigins]);
 const { Pool } = pg;
-const pool = DATABASE_URL
+let pool = DATABASE_URL
   ? new Pool({
       connectionString: DATABASE_URL,
       ssl: process.env.PGSSL === 'true' ? { rejectUnauthorized: false } : false
@@ -1627,11 +1627,13 @@ async function initializePostgresWithRetry() {
       console.error(`PostgreSQL initialization failed (attempt ${attempt}/${attempts}):`, err.message);
 
       if (isLastAttempt) {
-        if (IS_DEPLOYED_RUNTIME) {
-          throw err;
+        console.warn('PostgreSQL is unavailable. Falling back to JSON database so the web service can still start.');
+        try {
+          await pool.end();
+        } catch (closeErr) {
+          console.warn('Failed to close unavailable PostgreSQL pool:', closeErr.message);
         }
-
-        console.warn('Falling back to local JSON database because PostgreSQL is unavailable in development.');
+        pool = null;
         return false;
       }
 
