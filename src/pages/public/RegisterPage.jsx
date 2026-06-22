@@ -43,6 +43,7 @@ export default function RegisterPage() {
   const [confirmationResult, setConfirmationResult] = useState(null);
   const [verifiedPhone, setVerifiedPhone] = useState('');
   const [firebaseIdToken, setFirebaseIdToken] = useState('');
+  const [recaptchaKey, setRecaptchaKey] = useState(() => Date.now());
   const { setUsers, setCitizenProfiles } = useData();
   const toast = useToast();
   const navigate = useNavigate();
@@ -57,6 +58,7 @@ export default function RegisterPage() {
       setConfirmationResult(null);
       setOtpCode('');
       resetRecaptchaVerifier();
+      setRecaptchaKey(Date.now());
     }
   };
 
@@ -70,13 +72,17 @@ export default function RegisterPage() {
     setOtpLoading(true);
     try {
       resetRecaptchaVerifier();
-      const result = await sendPhoneOtp(firebasePhone);
+      const nextRecaptchaKey = Date.now();
+      setRecaptchaKey(nextRecaptchaKey);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      const result = await sendPhoneOtp(firebasePhone, `firebase-recaptcha-container-${nextRecaptchaKey}`);
       setConfirmationResult(result);
       setOtpCode('');
       toast.success(`Đã gửi mã OTP đến ${firebasePhone}.`);
     } catch (err) {
       console.error('Firebase phone OTP failed:', err);
       resetRecaptchaVerifier();
+      setRecaptchaKey(Date.now());
       toast.error(getOtpErrorMessage(err));
     } finally {
       setOtpLoading(false);
@@ -185,7 +191,7 @@ export default function RegisterPage() {
                 >
                   {isPhoneVerified ? 'Đã xác thực SĐT' : otpLoading ? 'Đang gửi OTP...' : 'Gửi mã OTP'}
                 </button>
-                <div id="firebase-recaptcha-container" />
+                <div key={recaptchaKey} id={`firebase-recaptcha-container-${recaptchaKey}`} />
               </div>
             </div>
 

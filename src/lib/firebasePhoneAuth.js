@@ -54,7 +54,11 @@ export async function verifyPhoneOtp(confirmationResult, otpCode) {
 
 export function resetRecaptchaVerifier() {
   if (recaptchaVerifier) {
-    recaptchaVerifier.clear();
+    try {
+      recaptchaVerifier.clear();
+    } catch (err) {
+      console.warn('Failed to clear Firebase reCAPTCHA verifier:', err);
+    }
     recaptchaVerifier = null;
   }
   resetRecaptchaContainer();
