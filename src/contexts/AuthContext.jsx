@@ -35,6 +35,7 @@ export function AuthProvider({ children }) {
         } else {
           localStorage.removeItem('currentProfile');
         }
+        window.dispatchEvent(new Event('auth:session-changed'));
         return { success: true, user: res.data.user };
       }
       return { success: false, message: 'Đăng nhập không thành công' };
@@ -53,6 +54,7 @@ export function AuthProvider({ children }) {
     setCurrentProfile(null);
     localStorage.removeItem('currentUser');
     localStorage.removeItem('currentProfile');
+    window.dispatchEvent(new Event('auth:session-changed'));
   }, []);
 
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';

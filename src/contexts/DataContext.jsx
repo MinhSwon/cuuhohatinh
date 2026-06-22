@@ -64,19 +64,26 @@ export function DataProvider({ children }) {
     setDbSynced(true);
   }, []);
 
-  // Sync state with Express backend database on mount
-  useEffect(() => {
-    async function syncWithBackend() {
-      try {
-        if (!hasLocalSession()) return;
-        const res = await axios.get('/api/db');
-        applyBackendState(res.data);
-      } catch (err) {
-        console.warn('Backend server offline. Running in offline mockup mode with local state.', err);
+  const syncWithBackend = useCallback(async () => {
+    try {
+      if (!hasLocalSession()) return;
+      const res = await axios.get('/api/db');
+      applyBackendState(res.data);
+    } catch (err) {
+      if (err.response?.status === 401) {
+        localStorage.removeItem('currentUser');
+        localStorage.removeItem('currentProfile');
+        setSessionKey('');
+        return;
       }
+      console.warn('Backend server offline. Running in offline mockup mode with local state.', err);
     }
+  }, [applyBackendState]);
+
+  // Sync state with Express backend database on mount and after login/logout.
+  useEffect(() => {
     syncWithBackend();
-  }, [applyBackendState, sessionKey]);
+  }, [syncWithBackend, sessionKey]);
 
   useEffect(() => {
     if (typeof window === 'undefined' || typeof EventSource === 'undefined') return undefined;
@@ -110,10 +117,12 @@ export function DataProvider({ children }) {
     };
 
     window.addEventListener('storage', syncSession);
+    window.addEventListener('auth:session-changed', syncSession);
     const sessionPoll = window.setInterval(syncSession, 1000);
 
     return () => {
       window.removeEventListener('storage', syncSession);
+      window.removeEventListener('auth:session-changed', syncSession);
       window.clearInterval(sessionPoll);
     };
   }, []);

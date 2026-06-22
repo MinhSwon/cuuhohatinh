@@ -1241,7 +1241,7 @@ function authCookieOptions() {
   return {
     httpOnly: true,
     secure: IS_DEPLOYED_RUNTIME,
-    sameSite: 'lax',
+    sameSite: IS_DEPLOYED_RUNTIME ? 'none' : 'lax',
     path: '/',
     maxAge: 8 * 60 * 60 * 1000,
   };
@@ -1255,7 +1255,7 @@ function clearAuthCookie(res) {
   res.clearCookie(AUTH_COOKIE_NAME, {
     httpOnly: true,
     secure: IS_DEPLOYED_RUNTIME,
-    sameSite: 'lax',
+    sameSite: IS_DEPLOYED_RUNTIME ? 'none' : 'lax',
     path: '/',
   });
 }
