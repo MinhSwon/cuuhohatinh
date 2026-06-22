@@ -106,15 +106,15 @@ export async function countPendingOfflineActions() {
 }
 
 export function buildEmergencySmsBody(payload = {}) {
-  const name = payload.victim_name || payload.full_name || 'Nguoi can cuu ho';
+  const name = payload.victim_name || payload.full_name || 'Người cần cứu hộ';
   const phone = payload.victim_phone || payload.phone || '';
-  const area = payload.victim_area_name || payload.area_name || 'Chua xac dinh';
+  const area = payload.victim_area_name || payload.area_name || 'Chưa xác định';
   const address = payload.victim_address_detail || payload.address_detail || '';
   const people = payload.number_of_people || 1;
   const lat = payload.victim_latitude ?? payload.latitude;
   const lng = payload.victim_longitude ?? payload.longitude;
   const gps = lat != null && lng != null ? ` GPS:${Number(lat).toFixed(5)},${Number(lng).toFixed(5)}` : '';
-  return `SOS CUU HO: ${name}. SDT:${phone}. Khu vuc:${area}. Dia chi:${address}. So nguoi:${people}.${gps}`;
+  return `SOS CỨU HỘ: ${name}. SĐT:${phone}. Khu vực:${area}. Địa chỉ:${address}. Số người:${people}.${gps}`;
 }
 
 export function buildSmsHref(phone, body) {

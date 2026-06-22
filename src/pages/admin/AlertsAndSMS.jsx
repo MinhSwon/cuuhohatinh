@@ -3,7 +3,6 @@ import axios from 'axios';
 import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Search, X, Send } from 'lucide-react';
-import { AREAS } from '../../data/publicData';
 
 function splitPhones(value) {
   return String(value || '')
@@ -12,31 +11,31 @@ function splitPhones(value) {
     .filter(Boolean);
 }
 
-function SendSMSModal({ onSend, onClose }) {
+function SendSMSModal({ onSend, onClose, areas }) {
   const [form, setForm] = useState({
     target: 'direct',
     area_id: '',
     phones: '',
-    custom_message: 'FLOODGUARD: Day la tin nhan kiem tra tu he thong cuu ho. Neu ban nhan duoc tin nay, SMS Gateway da hoat dong.',
+    custom_message: 'FLOODGUARD: Đây là tin nhắn kiểm tra từ hệ thống cứu hộ. Nếu bạn nhận được tin này, SMS Gateway đã hoạt động.',
   });
   const [loading, setLoading] = useState(false);
 
   const templateMessages = [
     {
       label: 'Cảnh báo lũ khẩn cấp',
-      text: 'FLOODGUARD: Canh bao lu khan cap tai khu vuc cua ban. Hay di chuyen den diem an toan va theo doi huong dan tu doi dieu phoi.',
+      text: 'FLOODGUARD: Cảnh báo lũ khẩn cấp tại khu vực của bạn. Hãy di chuyển đến điểm an toàn và theo dõi hướng dẫn từ đội điều phối.',
     },
     {
       label: 'Xác nhận tiếp nhận cứu hộ',
-      text: 'FLOODGUARD: Yeu cau cuu ho cua ban da duoc tiep nhan. Hay giu dien thoai, o vi tri an toan va doi doi cuu ho lien he.',
+      text: 'FLOODGUARD: Yêu cầu cứu hộ của bạn đã được tiếp nhận. Hãy giữ điện thoại, ở vị trí an toàn và đợi đội cứu hộ liên hệ.',
     },
     {
       label: 'Đội cứu hộ đang đến',
-      text: 'FLOODGUARD: Doi cuu ho da nhan nhiem vu va dang den vi tri cua ban. Hay ra tin hieu khi thay doi va giu lien lac.',
+      text: 'FLOODGUARD: Đội cứu hộ đã nhận nhiệm vụ và đang đến vị trí của bạn. Hãy ra tín hiệu khi thấy đội và giữ liên lạc.',
     },
     {
       label: 'Gửi thử SMS',
-      text: 'FLOODGUARD: Day la tin nhan kiem tra tu he thong cuu ho. Neu ban nhan duoc tin nay, SMS Gateway da hoat dong.',
+      text: 'FLOODGUARD: Đây là tin nhắn kiểm tra từ hệ thống cứu hộ. Nếu bạn nhận được tin này, SMS Gateway đã hoạt động.',
     },
   ];
 
@@ -109,7 +108,7 @@ function SendSMSModal({ onSend, onClose }) {
                 onChange={e => setForm(f => ({ ...f, area_id: e.target.value }))}
               >
                 <option value="">Tất cả khu vực</option>
-                {AREAS.map(area => (
+                {areas.map(area => (
                   <option key={area.id} value={area.id}>{area.old_name}</option>
                 ))}
               </select>
@@ -219,7 +218,7 @@ function ProviderStatusCard() {
 }
 
 export default function AlertsAndSMS() {
-  const { smsLogs, sendSmsNotification } = useData();
+  const { smsLogs, sendSmsNotification, areas } = useData();
   const toast = useToast();
   const [showSend, setShowSend] = useState(false);
   const [filterStatus, setFilterStatus] = useState('');
@@ -354,7 +353,7 @@ export default function AlertsAndSMS() {
         </div>
       </div>
 
-      {showSend && <SendSMSModal onSend={handleRealSend} onClose={() => setShowSend(false)} />}
+      {showSend && <SendSMSModal onSend={handleRealSend} onClose={() => setShowSend(false)} areas={areas} />}
     </div>
   );
 }

@@ -70,6 +70,7 @@ const hasLatLng = (lat, lng) => isValidCoordinate(lat) && isValidCoordinate(lng)
 const hasHaTinhLatLng = (lat, lng) => hasLatLng(lat, lng) && isInHaTinhBounds(lat, lng);
 const missionHasVictimLocation = mission => hasHaTinhLatLng(mission?.victim_latitude, mission?.victim_longitude);
 const missionHasRescuerLocation = mission => hasHaTinhLatLng(mission?.current_rescuer_latitude, mission?.current_rescuer_longitude);
+const SHOW_GPS_SIMULATION = import.meta.env.DEV;
 
 function MapUpdater({ center }) {
   const map = useMap();
@@ -106,6 +107,7 @@ export default function DispatchCenter() {
 
   // Simulate GPS update for a mission
   const simulateGPSUpdate = (mission) => {
+    if (!SHOW_GPS_SIMULATION) return;
     if (!missionHasVictimLocation(mission)) {
       toast.error('Nhiệm vụ này chưa có tọa độ nạn nhân để mô phỏng GPS');
       return;
@@ -251,7 +253,7 @@ export default function DispatchCenter() {
                   )}
                 </div>
 
-                {m.status === 'MOVING' && missionHasVictimLocation(m) && (
+                {SHOW_GPS_SIMULATION && m.status === 'MOVING' && missionHasVictimLocation(m) && (
                   <button
                     className="btn btn-secondary btn-sm"
                     style={{ marginTop: '0.5rem', width: '100%', justifyContent: 'center', fontSize: '0.7rem' }}
@@ -367,7 +369,7 @@ export default function DispatchCenter() {
             {[
               { icon: '⏳', label: 'Yêu cầu chờ phân công', color: '#dc2626' },
               { icon: '🆘', label: 'Đã có đội phụ trách', color: '#2563eb' },
-              { icon: '➕', label: 'Nhiem vu ho tro/cum', color: '#7c3aed' },
+              { icon: '➕', label: 'Nhiệm vụ hỗ trợ/cụm', color: '#7c3aed' },
               { icon: '🛡️', label: 'Đội cứu hộ', color: '#10b981' },
               { icon: '🏫', label: 'Điểm sơ tán', color: '#3b82f6' },
               { icon: '⭕', label: 'Vùng geofence 100m', color: '#f97316' },

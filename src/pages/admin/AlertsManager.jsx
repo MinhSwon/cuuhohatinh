@@ -4,13 +4,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Plus, Edit2, Trash2, Bell, Send, Eye, Filter, Search, X } from 'lucide-react';
 import { StatusBadge, LevelBadge } from '../../components/common/StatusBadge';
-import { AREAS } from '../../data/publicData';
 
 const LEVELS = ['LOW', 'MEDIUM', 'HIGH', 'EMERGENCY'];
 const LEVEL_LABELS = { LOW: 'Thấp', MEDIUM: 'Trung bình', HIGH: 'Cao', EMERGENCY: 'Khẩn cấp' };
 const STATUS_LABELS_W = { DRAFT: 'Bản nháp', PUBLISHED: 'Đã công bố', EXPIRED: 'Hết hiệu lực', CANCELLED: 'Đã hủy' };
 
-function WarningForm({ initial, onSave, onClose }) {
+function WarningForm({ initial, onSave, onClose, areas }) {
   const [form, setForm] = useState(initial || {
     title: '', content: '', level: 'MEDIUM', area_id: '', status: 'DRAFT',
     start_time: new Date().toISOString().slice(0, 16),
@@ -33,7 +32,7 @@ function WarningForm({ initial, onSave, onClose }) {
           <label className="form-label">Khu vực ảnh hưởng *</label>
           <select className="form-input form-select" value={form.area_id} onChange={e => setForm(f => ({ ...f, area_id: e.target.value }))} required>
             <option value="">-- Chọn khu vực --</option>
-            {AREAS.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
+            {areas.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
           </select>
         </div>
         <div>
@@ -73,7 +72,7 @@ function WarningForm({ initial, onSave, onClose }) {
 }
 
 export default function AlertsManager() {
-  const { floodWarnings, createWarning, updateWarning, deleteWarning, sendSmsNotification, addLog } = useData();
+  const { floodWarnings, createWarning, updateWarning, deleteWarning, sendSmsNotification, addLog, areas } = useData();
   const { currentUser } = useAuth();
   const toast = useToast();
   const [showForm, setShowForm] = useState(false);
@@ -93,7 +92,7 @@ export default function AlertsManager() {
   });
 
   const handleSave = async (form) => {
-    const area = AREAS.find(a => a.id === form.area_id);
+    const area = areas.find(a => a.id === form.area_id);
     if (editWarning) {
       await updateWarning(editWarning.id, { ...form, area_name: area?.old_name });
       toast.success('Đã cập nhật cảnh báo!');
@@ -161,7 +160,7 @@ export default function AlertsManager() {
         </div>
         <select className="form-input form-select" style={{ width: 150 }} value={filterArea} onChange={e => setFilterArea(e.target.value)}>
           <option value="">Tất cả khu vực</option>
-          {AREAS.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
+          {areas.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
         </select>
         <select className="form-input form-select" style={{ width: 150 }} value={filterLevel} onChange={e => setFilterLevel(e.target.value)}>
           <option value="">Tất cả mức độ</option>
@@ -259,7 +258,7 @@ export default function AlertsManager() {
               <button onClick={() => { setShowForm(false); setEditWarning(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
             </div>
             <div style={{ padding: '1.5rem' }}>
-              <WarningForm initial={editWarning} onSave={handleSave} onClose={() => { setShowForm(false); setEditWarning(null); }} />
+              <WarningForm initial={editWarning} onSave={handleSave} onClose={() => { setShowForm(false); setEditWarning(null); }} areas={areas} />
             </div>
           </div>
         </div>

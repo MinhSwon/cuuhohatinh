@@ -4,12 +4,11 @@ import {
   PieChart, Pie, Cell, LineChart, Line, Legend
 } from 'recharts';
 import { BarChart3, Download, TrendingUp } from 'lucide-react';
-import { AREAS } from '../../data/publicData';
 
 export default function Reports() {
-  const { rescueRequests, rescueMissions, rescueTeams, floodWarnings, smsLogs, vulnerableHouseholds } = useData();
+  const { rescueRequests, rescueMissions, rescueTeams, floodWarnings, smsLogs, vulnerableHouseholds, areas } = useData();
 
-  const byArea = AREAS.map(a => ({
+  const byArea = areas.map(a => ({
     name: a.old_name.replace('Thị trấn ', 'TT.').replace('Xã ', ''),
     total: rescueRequests.filter(r => r.area_id === a.id).length,
     rescued: rescueRequests.filter(r => r.area_id === a.id && ['RESCUED', 'TRANSFERRED_SAFEZONE'].includes(r.status)).length,

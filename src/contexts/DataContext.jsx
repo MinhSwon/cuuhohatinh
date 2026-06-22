@@ -11,7 +11,7 @@ import {
 const DataContext = createContext(null);
 const shouldUseOfflineFallback = (err) => !err.response;
 
-function getEventStreamUrl(token) {
+function getEventStreamUrl() {
   const apiBaseUrl = axios.defaults.baseURL || '';
   const url = new URL('/api/events', apiBaseUrl || window.location.origin);
   return url.toString();
@@ -38,6 +38,10 @@ export function DataProvider({ children }) {
   const [damageReports, setDamageReports] = useState([]);
   const [activityLogs, setActivityLogs] = useState([]);
   const [notifications, setNotifications] = useState([]);
+  const [publicStats, setPublicStats] = useState({
+    rescue_request_count: 0,
+    available_team_count: 0,
+  });
   const [dbSynced, setDbSynced] = useState(false);
   const [isOnline, setIsOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine);
   const [offlineQueueCount, setOfflineQueueCount] = useState(0);
@@ -79,6 +83,26 @@ export function DataProvider({ children }) {
       console.warn('Backend server offline. Running in offline mockup mode with local state.', err);
     }
   }, [applyBackendState]);
+
+  useEffect(() => {
+    let active = true;
+
+    axios.get('/api/public/overview')
+      .then(res => {
+        if (!active) return;
+        if (Array.isArray(res.data?.areas)) setAreas(res.data.areas);
+        if (Array.isArray(res.data?.floodWarnings)) setFloodWarnings(res.data.floodWarnings);
+        if (Array.isArray(res.data?.safeZones)) setSafeZones(res.data.safeZones);
+        if (res.data?.stats) setPublicStats(res.data.stats);
+      })
+      .catch(err => {
+        console.warn('Cannot sync public overview. Keeping local fallback public data.', err);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Sync state with Express backend database on mount and after login/logout.
   useEffect(() => {
@@ -617,6 +641,7 @@ export function DataProvider({ children }) {
       damageReports, setDamageReports,
       activityLogs, setActivityLogs,
       notifications, setNotifications,
+      publicStats,
       dbSynced,
       isOnline,
       offlineQueueCount,

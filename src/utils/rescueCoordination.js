@@ -26,7 +26,7 @@ export function getRequestPhone(request) {
 }
 
 export function getRequestAreaName(request) {
-  return request?.victim_area_name || request?.area_name || 'Chua xac dinh';
+  return request?.victim_area_name || request?.area_name || 'Chưa xác định';
 }
 
 export function getRequestAddress(request) {
@@ -55,7 +55,7 @@ export function findNearbyActiveMissions(request, missions = [], radiusMeters = 
       const missionPos = getMissionLatLng(mission);
       if (!missionPos) return null;
       const distance = haversineDistance(requestPos.lat, requestPos.lng, missionPos.lat, missionPos.lng);
-      return distance <= radiusMeters ? { mission, distance } : null;
+      return distance !== null && distance <= radiusMeters ? { mission, distance } : null;
     })
     .filter(Boolean)
     .sort((a, b) => a.distance - b.distance);
@@ -96,7 +96,7 @@ export function getTeamRecommendation(team, request, missions = []) {
     activeCount: activeMissions.length,
     maxActive,
     distance,
-    distanceLabel: distance === null ? 'Chua co GPS doi/diem cuu' : formatDistance(distance),
+    distanceLabel: distance === null ? 'Chưa có GPS đội/điểm cứu' : formatDistance(distance),
     overCapacity,
     unavailable,
     score,
@@ -141,7 +141,7 @@ export function getAssignmentWarnings(request, missions = [], teams = [], select
     if (recommendation.unavailable) {
       warnings.push({
         type: 'TEAM_UNAVAILABLE',
-        message: `${selectedTeam.team_name || selectedTeam.name} khong o trang thai san sang.`,
+        message: `${selectedTeam.team_name || selectedTeam.name} không ở trạng thái sẵn sàng.`,
       });
     }
   }

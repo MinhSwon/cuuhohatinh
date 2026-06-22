@@ -4,7 +4,6 @@ import axios from 'axios';
 import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Phone, Lock, User, MapPin } from 'lucide-react';
-import { AREAS } from '../../data/publicData';
 import { sendPhoneOtp, verifyPhoneOtp, resetRecaptchaVerifier } from '../../lib/firebasePhoneAuth';
 
 function toFirebasePhoneNumber(phone) {
@@ -44,7 +43,7 @@ export default function RegisterPage() {
   const [verifiedPhone, setVerifiedPhone] = useState('');
   const [firebaseIdToken, setFirebaseIdToken] = useState('');
   const [recaptchaKey, setRecaptchaKey] = useState(() => Date.now());
-  const { setUsers, setCitizenProfiles } = useData();
+  const { setUsers, setCitizenProfiles, areas } = useData();
   const toast = useToast();
   const navigate = useNavigate();
   const isPhoneVerified = Boolean(firebaseIdToken && verifiedPhone === form.phone);
@@ -120,7 +119,7 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
-      const selectedArea = AREAS.find(area => area.id === form.area_id);
+      const selectedArea = areas.find(area => area.id === form.area_id);
       const res = await axios.post('/api/auth/register', {
         ...form,
         area_name: selectedArea?.old_name || selectedArea?.current_name || '',
@@ -239,7 +238,7 @@ export default function RegisterPage() {
                 <label className="form-label">Khu vực *</label>
                 <select className="form-input form-select" value={form.area_id} onChange={e => setForm(f => ({ ...f, area_id: e.target.value }))} required>
                   <option value="">-- Chọn khu vực --</option>
-                  {AREAS.map(a => (
+                  {areas.map(a => (
                     <option key={a.id} value={a.id}>{a.old_name}</option>
                   ))}
                 </select>

@@ -4,13 +4,12 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, MapPin, Send } from 'lucide-react';
-import { AREAS } from '../../data/publicData';
 import OfflineStatusBanner from '../../components/common/OfflineStatusBanner';
 import EmergencyFallbackActions from '../../components/common/EmergencyFallbackActions';
 
 export default function RescueRequest() {
   const { currentUser } = useAuth();
-  const { createRescueRequest, citizenProfiles, addNotification } = useData();
+  const { createRescueRequest, citizenProfiles, addNotification, areas } = useData();
   const toast = useToast();
   const navigate = useNavigate();
 
@@ -42,7 +41,7 @@ export default function RescueRequest() {
   const [submitted, setSubmitted] = useState(false);
   const [submittedRequest, setSubmittedRequest] = useState(null);
   const [loading, setLoading] = useState(false);
-  const selectedArea = AREAS.find(a => a.id === form.area_id);
+  const selectedArea = areas.find(a => a.id === form.area_id);
   const fallbackPayload = {
     ...form,
     area_name: selectedArea?.old_name || '',
@@ -67,7 +66,7 @@ export default function RescueRequest() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
-    const area = AREAS.find(a => a.id === form.area_id);
+    const area = areas.find(a => a.id === form.area_id);
     const isRemoteReport = form.requester_type !== 'SELF';
     const payload = {
       ...form,
@@ -243,7 +242,7 @@ export default function RescueRequest() {
                 <label className="form-label">Khu vực *</label>
                 <select className="form-input form-select" value={form.area_id} onChange={e => setForm(f => ({ ...f, area_id: e.target.value }))} required>
                   <option value="">-- Chọn khu vực --</option>
-                  {AREAS.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
+                  {areas.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
                 </select>
               </div>
               <div>

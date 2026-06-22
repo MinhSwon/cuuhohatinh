@@ -4,10 +4,9 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Anchor, AlertTriangle, Ship, Compass, Waves, Plus, Bell, Clock, MapPin } from 'lucide-react';
 import { StatusBadge, LevelBadge } from '../../components/common/StatusBadge';
-import { AREAS } from '../../data/publicData';
 
 export default function CoastalWarnings() {
-  const { floodWarnings, createWarning } = useData();
+  const { floodWarnings, createWarning, areas } = useData();
   const { currentUser } = useAuth();
   const toast = useToast();
 
@@ -39,7 +38,7 @@ export default function CoastalWarnings() {
       return;
     }
 
-    const area = AREAS.find(a => a.id === form.area_id);
+    const area = areas.find(a => a.id === form.area_id);
     const startTime = new Date().toISOString();
     const endTime = new Date(Date.now() + Number(form.duration_hours) * 60 * 60 * 1000).toISOString();
 
@@ -141,7 +140,7 @@ export default function CoastalWarnings() {
                   required
                 >
                   <option value="">-- Chọn --</option>
-                  {AREAS.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
+                  {areas.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
                 </select>
               </div>
               <div>

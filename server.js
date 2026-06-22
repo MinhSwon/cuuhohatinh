@@ -1786,6 +1786,32 @@ app.get('/api/readiness', async (req, res) => {
   }
 });
 
+app.get('/api/public/areas', (req, res) => {
+  const publicAreas = Array.isArray(db.areas) ? db.areas : [];
+  res.json(sanitizeObject(publicAreas));
+});
+
+app.get('/api/public/overview', (req, res) => {
+  const publicWarnings = Array.isArray(db.floodWarnings)
+    ? db.floodWarnings.filter(w => w.status === 'PUBLISHED')
+    : [];
+  const publicSafeZones = getPublicSafeZones();
+  const rescueRequestCount = Array.isArray(db.rescueRequests) ? db.rescueRequests.length : 0;
+  const availableTeamCount = Array.isArray(db.rescueTeams)
+    ? db.rescueTeams.filter(team => team.status === 'AVAILABLE').length
+    : 0;
+
+  res.json(sanitizeObject({
+    areas: Array.isArray(db.areas) ? db.areas : [],
+    floodWarnings: publicWarnings,
+    safeZones: publicSafeZones,
+    stats: {
+      rescue_request_count: rescueRequestCount,
+      available_team_count: availableTeamCount,
+    },
+  }));
+});
+
 // 1. GET AUTHENTICATED DATABASE STATE (Sync on page load)
 app.get('/api/db', requireAuth, async (req, res) => {
   if (req.authError) {

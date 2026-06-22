@@ -4,7 +4,6 @@ import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Eye, UserCheck, X, Filter, ChevronDown, AlertTriangle, Phone, MapPin, Users } from 'lucide-react';
 import { StatusBadge, LevelBadge } from '../../components/common/StatusBadge';
-import { AREAS } from '../../data/publicData';
 import {
   getAssignmentWarnings,
   getRequestAddress,
@@ -25,12 +24,12 @@ function AssignModal({ request, teams, missions = [], onAssign, onClose }) {
 
   return (
     <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
-      <div className="modal-box" style={{ maxWidth: 480 }}>
-        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="modal-box" style={{ maxWidth: 520, maxHeight: '88vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <div style={{ padding: '1.25rem 1.5rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'white', flexShrink: 0 }}>
           <h3 style={{ fontWeight: 700, fontSize: '1rem' }}>Phân công đội cứu hộ</h3>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
         </div>
-        <div style={{ padding: '1.5rem' }}>
+        <div style={{ padding: '1.5rem', overflowY: 'auto', flex: 1 }}>
           <div style={{ background: '#f8fafc', borderRadius: 10, padding: '0.875rem', marginBottom: '1.25rem' }}>
             <div style={{ fontWeight: 600, fontSize: '0.88rem', marginBottom: '0.5rem' }}>{getRequestName(request)}</div>
             <div style={{ fontSize: '0.78rem', color: '#64748b' }}>📍 {request.address_detail}</div>
@@ -87,9 +86,9 @@ function AssignModal({ request, teams, missions = [], onAssign, onClose }) {
                   />
                   <div style={{ flex: 1 }}>
                     <div style={{ fontWeight: 600, fontSize: '0.82rem' }}>
-                      {team.team_name} {index === 0 && <span style={{ color: '#16a34a', fontSize: '0.65rem' }}>Goi y</span>}
+                      {team.team_name || 'Đội cứu hộ chưa đặt tên'} {index === 0 && <span style={{ color: '#16a34a', fontSize: '0.65rem' }}>Gợi ý</span>}
                     </div>
-                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>👤 {team.leader_name} · 📞 {team.phone} · {team.member_count} thành viên</div>
+                    <div style={{ fontSize: '0.7rem', color: '#64748b' }}>👤 {team.leader_name || 'Chưa có trưởng đội'} · 📞 {team.phone || 'Chưa có SĐT'} · {team.member_count || 0} thành viên</div>
                     <div style={{ fontSize: '0.68rem', color: overCapacity ? '#dc2626' : '#64748b', marginTop: 2 }}>
                       Tải hiện tại: {activeCount}/{maxActive} nhiệm vụ đang xử lý - {distanceLabel}
                     </div>
@@ -100,12 +99,12 @@ function AssignModal({ request, teams, missions = [], onAssign, onClose }) {
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.25rem', justifyContent: 'flex-end' }}>
-            <button className="btn btn-secondary" onClick={onClose}>Hủy</button>
-            <button className="btn btn-primary" disabled={!selectedTeam} onClick={() => onAssign(selectedTeam, warnings)}>
-              <UserCheck size={16} /> Xác nhận phân công
-            </button>
-          </div>
+        </div>
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', padding: '1rem 1.5rem', borderTop: '1px solid #e2e8f0', background: 'rgba(255,255,255,0.96)', boxShadow: '0 -8px 24px rgba(15,23,42,0.06)', flexShrink: 0 }}>
+          <button className="btn btn-secondary" onClick={onClose}>Hủy</button>
+          <button className="btn btn-primary" disabled={!selectedTeam} onClick={() => onAssign(selectedTeam, warnings)}>
+            <UserCheck size={16} /> Xác nhận phân công
+          </button>
         </div>
       </div>
     </div>
@@ -182,7 +181,7 @@ function DetailModal({ request, onClose }) {
 }
 
 export default function RescueRequests() {
-  const { rescueRequests, rescueTeams, rescueMissions, assignTeamToRequest, updateRescueRequest, searchSemantics } = useData();
+  const { rescueRequests, rescueTeams, rescueMissions, assignTeamToRequest, updateRescueRequest, searchSemantics, areas } = useData();
   const { currentUser } = useAuth();
   const toast = useToast();
   const [filterArea, setFilterArea] = useState('');
@@ -338,7 +337,7 @@ export default function RescueRequests() {
         </button>
         <select className="form-input form-select" style={{ width: 160 }} value={filterArea} onChange={e => setFilterArea(e.target.value)}>
           <option value="">Tất cả khu vực</option>
-          {AREAS.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
+          {areas.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
         </select>
         <select className="form-input form-select" style={{ width: 150 }} value={filterLevel} onChange={e => setFilterLevel(e.target.value)}>
           <option value="">Tất cả mức độ</option>

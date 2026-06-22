@@ -2,7 +2,6 @@ import { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useData } from '../../contexts/DataContext';
 import { AlertTriangle, Phone, MapPin, Loader, CheckCircle, X, ChevronDown } from 'lucide-react';
-import { AREAS } from '../../data/publicData';
 import OfflineStatusBanner from '../../components/common/OfflineStatusBanner';
 import EmergencyFallbackActions from '../../components/common/EmergencyFallbackActions';
 
@@ -18,7 +17,7 @@ const EMERGENCY_TYPES = [
 ];
 
 export default function SOSPage() {
-  const { createRescueRequest, addNotification } = useData();
+  const { createRescueRequest, addNotification, areas } = useData();
 
   const [step, setStep] = useState('TYPE'); // TYPE → PHONE → LOCATION → SENDING → DONE
   const [selectedType, setSelectedType] = useState(null);
@@ -37,11 +36,11 @@ export default function SOSPage() {
   const [countdown, setCountdown] = useState(null);
   const [sendError, setSendError] = useState('');
   const timerRef = useRef(null);
-  const currentArea = AREAS.find(a => a.id === areaId);
+  const currentArea = areas.find(a => a.id === areaId);
   const emergencyPayload = {
-    full_name: requesterType !== 'SELF' ? (victimName || 'Nguoi can cuu ho') : 'Nguoi dung SOS',
+    full_name: requesterType !== 'SELF' ? (victimName || 'Người cần cứu hộ') : 'Người dùng SOS',
     phone: requesterType !== 'SELF' ? (victimPhone || phone) : phone,
-    victim_name: requesterType !== 'SELF' ? (victimName || 'Nguoi can cuu ho') : 'Nguoi dung SOS',
+    victim_name: requesterType !== 'SELF' ? (victimName || 'Người cần cứu hộ') : 'Người dùng SOS',
     victim_phone: requesterType !== 'SELF' ? (victimPhone || phone) : phone,
     area_name: currentArea?.old_name || '',
     victim_area_name: currentArea?.old_name || '',
@@ -112,7 +111,7 @@ export default function SOSPage() {
   };
 
   const submitRequest = async () => {
-    const area = AREAS.find(a => a.id === areaId);
+    const area = areas.find(a => a.id === areaId);
     const isRemoteReport = requesterType !== 'SELF';
     const victimDisplayName = isRemoteReport ? (victimName || 'Người cần cứu hộ') : 'Người dùng SOS';
     const victimContactPhone = isRemoteReport ? victimPhone : phone;
@@ -124,8 +123,8 @@ export default function SOSPage() {
       full_name: victimDisplayName,
       phone: victimContactPhone || phone,
       area_id: areaId || '',
-      area_name: area?.old_name || 'Chua xac dinh',
-      address_detail: addressNote || (gps && !isRemoteReport ? `GPS: ${gps.lat.toFixed(5)}, ${gps.lon.toFixed(5)}` : 'Can xac minh vi tri'),
+      area_name: area?.old_name || 'Chưa xác định',
+      address_detail: addressNote || (gps && !isRemoteReport ? `GPS: ${gps.lat.toFixed(5)}, ${gps.lon.toFixed(5)}` : 'Cần xác minh vị trí'),
       description: `SOS khẩn cấp qua nút SOS. Loại: ${selectedType?.label}. ${isRemoteReport ? 'Người báo hộ đang báo thay người thân. ' : ''}${addressNote ? 'Ghi chú: ' + addressNote : ''}`,
       latitude: victimLat,
       longitude: victimLng,
@@ -138,8 +137,8 @@ export default function SOSPage() {
       victim_name: victimDisplayName,
       victim_phone: victimContactPhone || phone,
       victim_area_id: areaId || '',
-      victim_area_name: area?.old_name || 'Chua xac dinh',
-      victim_address_detail: addressNote || (gps && !isRemoteReport ? `GPS: ${gps.lat.toFixed(5)}, ${gps.lon.toFixed(5)}` : 'Can xac minh vi tri'),
+      victim_area_name: area?.old_name || 'Chưa xác định',
+      victim_address_detail: addressNote || (gps && !isRemoteReport ? `GPS: ${gps.lat.toFixed(5)}, ${gps.lon.toFixed(5)}` : 'Cần xác minh vị trí'),
       victim_latitude: victimLat,
       victim_longitude: victimLng,
     };
@@ -316,7 +315,7 @@ export default function SOSPage() {
 
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '1rem' }}>
               {[
-                { value: 'SELF', label: 'Toi can cuu' },
+                { value: 'SELF', label: 'Tôi cần cứu' },
                 { value: 'RELATIVE', label: 'Báo hộ người thân' },
               ].map(option => (
                 <button
@@ -457,7 +456,7 @@ export default function SOSPage() {
                   }}
                 >
                   <option value="" style={{ background: '#1e293b' }}>-- Chọn khu vực --</option>
-                  {AREAS.map(a => <option key={a.id} value={a.id} style={{ background: '#1e293b' }}>{a.old_name}</option>)}
+                  {areas.map(a => <option key={a.id} value={a.id} style={{ background: '#1e293b' }}>{a.old_name}</option>)}
                 </select>
                 <ChevronDown size={14} color="#64748b" style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
               </div>

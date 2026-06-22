@@ -5,11 +5,15 @@ import { LevelBadge } from '../../components/common/StatusBadge';
 import { getPublicSafeZones, getSafeZoneOccupancy } from '../../utils/safeZones';
 
 export default function HomePage() {
-  const { floodWarnings, safeZones, rescueRequests } = useData();
+  const { floodWarnings, safeZones, rescueRequests, rescueTeams, publicStats } = useData();
   const activeWarnings = floodWarnings.filter(w => w.status === 'PUBLISHED');
   const emergencyWarnings = activeWarnings.filter(w => w.level === 'EMERGENCY');
   const hasEmergency = emergencyWarnings.length > 0;
   const publicSafeZones = getPublicSafeZones(safeZones);
+  const rescueRequestTotal = rescueRequests.length || publicStats.rescue_request_count || 0;
+  const availableTeamTotal = rescueTeams.length
+    ? rescueTeams.filter(team => team.status === 'AVAILABLE').length
+    : publicStats.available_team_count || 0;
 
   const EMERGENCY_CONTACTS = [
     { name: 'Ban Chỉ huy PCTT Hương Khê', phone: '0693 851 000', icon: Shield },
@@ -128,8 +132,8 @@ export default function HomePage() {
             <div style={{ flex: '0 1 280px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
               {[
                 { icon: '🌊', label: 'Cảnh báo đang hoạt động', value: activeWarnings.length, dim: '#a04040' },
-                { icon: '🆘', label: 'Yêu cầu cứu hộ', value: rescueRequests.length, dim: '#a0731a' },
-                { icon: '🛡️', label: 'Đội cứu hộ sẵn sàng', value: 3, dim: '#3a6b4a' },
+                { icon: '🆘', label: 'Yêu cầu cứu hộ', value: rescueRequestTotal, dim: '#a0731a' },
+                { icon: '🛡️', label: 'Đội cứu hộ sẵn sàng', value: availableTeamTotal, dim: '#3a6b4a' },
                 { icon: '🏫', label: 'Điểm sơ tán mở', value: publicSafeZones.filter(s => s.status === 'AVAILABLE').length, dim: '#4a6fa5' },
               ].map((s, i) => (
                 <div key={i} style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 10, padding: '0.875rem', textAlign: 'center' }}>

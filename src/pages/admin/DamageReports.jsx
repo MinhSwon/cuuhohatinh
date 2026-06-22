@@ -3,14 +3,13 @@ import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { Plus, X, Home, Users, Wheat, Landmark, ShieldAlert } from 'lucide-react';
-import { AREAS } from '../../data/publicData';
 
 const DAMAGE_TYPES = ['Nhà cửa', 'Tài sản', 'Đường sá', 'Cầu cống', 'Nông nghiệp', 'Người bị thương', 'Thủy lợi/Hồ chứa'];
 const SEVERITY_LABELS = { LOW: 'Nhẹ', MEDIUM: 'Trung bình', HIGH: 'Nặng', EMERGENCY: 'Nghiêm trọng' };
 const SEVERITY_COLORS = { LOW: '#3b82f6', MEDIUM: '#f59e0b', HIGH: '#f97316', EMERGENCY: '#ef4444' };
 
 export default function DamageReports() {
-  const { damageReports, createDamageReport } = useData();
+  const { damageReports, createDamageReport, areas } = useData();
   const { currentUser } = useAuth();
   const toast = useToast();
   const [showForm, setShowForm] = useState(false);
@@ -37,7 +36,7 @@ export default function DamageReports() {
       return;
     }
 
-    const area = AREAS.find(a => a.id === form.area_id);
+    const area = areas.find(a => a.id === form.area_id);
     createDamageReport({
       ...form,
       area_name: area?.old_name || 'Hương Khê',
@@ -212,7 +211,7 @@ export default function DamageReports() {
                   <label className="form-label">Khu vực xảy ra *</label>
                   <select className="form-input form-select" value={form.area_id} onChange={e => setForm(f => ({ ...f, area_id: e.target.value }))} required>
                     <option value="">-- Chọn khu vực --</option>
-                    {AREAS.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
+                    {areas.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
                   </select>
                 </div>
                 <div>

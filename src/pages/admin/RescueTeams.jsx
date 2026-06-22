@@ -3,9 +3,8 @@ import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Plus, Edit2, Trash2, Users, Phone, X, ChevronDown } from 'lucide-react';
-import { AREAS } from '../../data/publicData';
 
-function TeamForm({ initial, onSave, onClose }) {
+function TeamForm({ initial, onSave, onClose, areas }) {
   const [form, setForm] = useState(initial || {
     team_name: '', area_id: '', leader_name: '', phone: '',
     vehicle_type: '', member_count: 5, max_active_missions: 2,
@@ -23,7 +22,7 @@ function TeamForm({ initial, onSave, onClose }) {
           <label className="form-label">Khu vực phụ trách *</label>
           <select className="form-input form-select" value={form.area_id} onChange={e => setForm(f => ({ ...f, area_id: e.target.value }))} required>
             <option value="">-- Chọn khu vực --</option>
-            {AREAS.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
+            {areas.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
           </select>
         </div>
         <div>
@@ -77,7 +76,7 @@ function TeamForm({ initial, onSave, onClose }) {
 }
 
 export default function RescueTeams() {
-  const { rescueTeams, createTeam, updateTeam, deleteTeam, rescueMissions } = useData();
+  const { rescueTeams, createTeam, updateTeam, deleteTeam, rescueMissions, areas } = useData();
   const toast = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editTeam, setEditTeam] = useState(null);
@@ -91,7 +90,7 @@ export default function RescueTeams() {
   const getSuccessCount = (teamId) => rescueMissions.filter(m => m.rescue_team_id === teamId && ['RESCUED', 'TRANSFERRED_SAFEZONE'].includes(m.status)).length;
 
   const handleSave = (form) => {
-    const area = AREAS.find(a => a.id === form.area_id);
+    const area = areas.find(a => a.id === form.area_id);
     if (editTeam) {
       updateTeam(editTeam.id, { ...form, area_name: area?.old_name });
       toast.success('Đã cập nhật đội cứu hộ!');
@@ -141,7 +140,7 @@ export default function RescueTeams() {
               <div style={{ padding: '1rem', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#0f172a', marginBottom: 4 }}>{team.team_name}</div>
-                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>📍 {team.area_name || AREAS.find(a => a.id === team.area_id)?.old_name}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#64748b' }}>📍 {team.area_name || areas.find(a => a.id === team.area_id)?.old_name}</div>
                 </div>
                 <StatusBadge status={team.status} />
               </div>
@@ -211,7 +210,7 @@ export default function RescueTeams() {
               <button onClick={() => { setShowForm(false); setEditTeam(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
             </div>
             <div style={{ padding: '1.5rem' }}>
-              <TeamForm initial={editTeam} onSave={handleSave} onClose={() => { setShowForm(false); setEditTeam(null); }} />
+              <TeamForm initial={editTeam} onSave={handleSave} onClose={() => { setShowForm(false); setEditTeam(null); }} areas={areas} />
             </div>
           </div>
         </div>

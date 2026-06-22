@@ -2,16 +2,15 @@ import { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Search, Filter, X } from 'lucide-react';
-import { AREAS } from '../../data/publicData';
 
 export default function Subscribers() {
-  const { citizenProfiles, users } = useData();
+  const { citizenProfiles, users, areas } = useData();
   const [search, setSearch] = useState('');
   const [filterArea, setFilterArea] = useState('');
 
   const enriched = citizenProfiles.map(cp => {
     const user = users.find(u => u.id === cp.user_id);
-    const area = AREAS.find(a => a.id === cp.area_id);
+    const area = areas.find(a => a.id === cp.area_id);
     return { ...cp, user, area };
   });
 
@@ -40,7 +39,7 @@ export default function Subscribers() {
         </div>
         <select className="form-input form-select" style={{ width: 170 }} value={filterArea} onChange={e => setFilterArea(e.target.value)}>
           <option value="">Tất cả khu vực</option>
-          {AREAS.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
+          {areas.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
         </select>
       </div>
 

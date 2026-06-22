@@ -2,16 +2,14 @@
 import { useAuth } from '../../contexts/AuthContext';
 import {
   Users, AlertTriangle, Shield, Bell, MessageSquare, TrendingUp,
-  CheckCircle, XCircle, Clock, PhoneCall, Activity, ChevronRight, Waves
+  CheckCircle, Clock, Activity, ChevronRight, Waves
 } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, LineChart, Line, Legend
+  PieChart, Pie, Cell, Legend
 } from 'recharts';
 import { StatusBadge, LevelBadge } from '../../components/common/StatusBadge';
 import { Link } from 'react-router-dom';
-
-const COLORS = ['#4a6fa5', '#3a6b4a', '#a0731a', '#a04040', '#6b5a9a', '#3a7a8a'];
 
 export default function AdminDashboard() {
   const { currentUser } = useAuth();
@@ -47,25 +45,40 @@ export default function AdminDashboard() {
     { name: 'Không liên lạc', value: unreachableRequests, color: '#a04040' },
   ].filter(d => d.value > 0);
 
-  // Chart: Daily warnings (mock)
-  const dailyData = [
-    { day: 'T2', canhbao: 1, cuuho: 2 },
-    { day: 'T3', canhbao: 2, cuuho: 3 },
-    { day: 'T4', canhbao: 1, cuuho: 1 },
-    { day: 'T5', canhbao: 3, cuuho: 5 },
-    { day: 'T6', canhbao: 4, cuuho: 8 },
-    { day: 'T7', canhbao: 3, cuuho: 6 },
-    { day: 'CN', canhbao: 2, cuuho: 4 },
-  ];
+  const toDateKey = value => {
+    const date = value ? new Date(value) : null;
+    if (!date || Number.isNaN(date.getTime())) return '';
+    return date.toISOString().slice(0, 10);
+  };
+  const todayKey = toDateKey(new Date().toISOString());
+  const lastSevenDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - index));
+    const key = toDateKey(date.toISOString());
+    return {
+      key,
+      label: date.toLocaleDateString('vi-VN', { weekday: 'short' }).replace('Th ', 'T'),
+    };
+  });
+
+  const dailyData = lastSevenDays.map(day => ({
+    day: day.label,
+    canhbao: floodWarnings.filter(w => toDateKey(w.created_at || w.start_time) === day.key).length,
+    cuuho: rescueRequests.filter(r => toDateKey(r.created_at) === day.key).length,
+  }));
+  const todayCitizenCount = citizenProfiles.filter(cp => toDateKey(cp.created_at) === todayKey).length;
+  const todayRescuedCount = rescueRequests.filter(r =>
+    ['RESCUED', 'TRANSFERRED_SAFEZONE'].includes(r.status) && toDateKey(r.updated_at || r.created_at) === todayKey
+  ).length;
 
   const statCards = [
-    { label: 'Tổng người dân', value: citizenProfiles.length, icon: Users, color: '#4a6fa5', bg: '#e8edf5', change: '+12 hôm nay' },
+    { label: 'Tổng người dân', value: citizenProfiles.length, icon: Users, color: '#4a6fa5', bg: '#e8edf5', change: `+${todayCitizenCount} hôm nay` },
     { label: 'Hộ dễ tổn thương', value: vulnerableHouseholds.length, icon: Shield, color: '#6b5a9a', bg: '#ede8f5', change: 'Ưu tiên cứu hộ' },
     { label: 'Đội cứu hộ sẵn sàng', value: `${availableTeams}/${rescueTeams.length}`, icon: Users, color: '#3a6b4a', bg: '#e0ede5', change: `${rescueTeams.filter(t => t.status === 'BUSY').length} đang nhiệm vụ` },
     { label: 'Cảnh báo đang hoạt động', value: activeWarnings, icon: Bell, color: '#a0731a', bg: '#f5efd8', change: 'Đang phát sóng' },
     { label: 'Chờ tiếp nhận', value: pendingRequests, icon: Clock, color: '#a04040', bg: '#f5e0e0', change: '⚠️ Cần phân công ngay' },
     { label: 'Đang xử lý', value: processingRequests, icon: Activity, color: '#4a6fa5', bg: '#e8edf5', change: 'Đang trong quá trình' },
-    { label: 'Cứu thành công', value: rescuedRequests, icon: CheckCircle, color: '#3a6b4a', bg: '#e0ede5', change: 'Hôm nay' },
+    { label: 'Cứu thành công', value: rescuedRequests, icon: CheckCircle, color: '#3a6b4a', bg: '#e0ede5', change: `${todayRescuedCount} hôm nay` },
     { label: 'SMS đã gửi', value: smsLogs.filter(s => s.status === 'SENT').length, icon: MessageSquare, color: '#3a7a8a', bg: '#ddeef2', change: `${smsLogs.filter(s => s.status === 'FAILED').length} thất bại` },
   ];
 

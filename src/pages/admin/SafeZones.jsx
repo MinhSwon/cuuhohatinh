@@ -3,10 +3,9 @@ import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Plus, Edit2, Trash2, Building2, X } from 'lucide-react';
-import { AREAS } from '../../data/publicData';
 import { getSafeZoneOccupancy, toFiniteNumber } from '../../utils/safeZones';
 
-function SafeZoneForm({ initial, onSave, onClose }) {
+function SafeZoneForm({ initial, onSave, onClose, areas }) {
   const [form, setForm] = useState(initial || {
     name: '', area_id: '', address: '', latitude: '', longitude: '',
     capacity: 100, current_people: 0, contact_person: '', contact_phone: '', status: 'AVAILABLE'
@@ -22,7 +21,7 @@ function SafeZoneForm({ initial, onSave, onClose }) {
           <label className="form-label">Khu vực *</label>
           <select className="form-input form-select" value={form.area_id} onChange={e => setForm(f => ({ ...f, area_id: e.target.value }))} required>
             <option value="">-- Chọn khu vực --</option>
-            {AREAS.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
+            {areas.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
           </select>
         </div>
         <div>
@@ -71,7 +70,7 @@ function SafeZoneForm({ initial, onSave, onClose }) {
 }
 
 export default function SafeZones() {
-  const { safeZones, createSafeZone, updateSafeZone, deleteSafeZone } = useData();
+  const { safeZones, createSafeZone, updateSafeZone, deleteSafeZone, areas } = useData();
   const toast = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editZone, setEditZone] = useState(null);
@@ -89,7 +88,7 @@ export default function SafeZones() {
   const totalOccupancy = totalCapacity > 0 ? Math.round((totalPeople / totalCapacity) * 100) : 0;
 
   const handleSave = (form) => {
-    const area = AREAS.find(a => a.id === form.area_id);
+    const area = areas.find(a => a.id === form.area_id);
     if (editZone) {
       updateSafeZone(editZone.id, { ...form, area_name: area?.old_name });
       toast.success('Đã cập nhật điểm sơ tán!');
@@ -131,7 +130,7 @@ export default function SafeZones() {
       <div className="filter-bar">
         <select className="form-input form-select" style={{ width: 160 }} value={filterArea} onChange={e => setFilterArea(e.target.value)}>
           <option value="">Tất cả khu vực</option>
-          {AREAS.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
+          {areas.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
         </select>
         <select className="form-input form-select" style={{ width: 140 }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
           <option value="">Tất cả trạng thái</option>
@@ -193,7 +192,7 @@ export default function SafeZones() {
               <button onClick={() => { setShowForm(false); setEditZone(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
             </div>
             <div style={{ padding: '1.5rem' }}>
-              <SafeZoneForm initial={editZone} onSave={handleSave} onClose={() => { setShowForm(false); setEditZone(null); }} />
+              <SafeZoneForm initial={editZone} onSave={handleSave} onClose={() => { setShowForm(false); setEditZone(null); }} areas={areas} />
             </div>
           </div>
         </div>

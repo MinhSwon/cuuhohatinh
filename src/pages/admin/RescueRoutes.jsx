@@ -3,9 +3,8 @@ import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
 import { Plus, Edit2, Trash2, X } from 'lucide-react';
-import { AREAS } from '../../data/publicData';
 
-function RouteForm({ initial, onSave, onClose }) {
+function RouteForm({ initial, onSave, onClose, areas }) {
   const [form, setForm] = useState(initial || {
     name: '', area_id: '', start_point: '', end_point: '',
     safety_level: 'SAFE', status: 'OPEN', note: ''
@@ -21,7 +20,7 @@ function RouteForm({ initial, onSave, onClose }) {
           <label className="form-label">Khu vực</label>
           <select className="form-input form-select" value={form.area_id} onChange={e => setForm(f => ({ ...f, area_id: e.target.value }))}>
             <option value="">-- Chọn khu vực --</option>
-            {AREAS.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
+            {areas.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
           </select>
         </div>
         <div>
@@ -62,7 +61,7 @@ function RouteForm({ initial, onSave, onClose }) {
 }
 
 export default function RescueRoutes() {
-  const { rescueRoutes, createRoute, updateRoute, deleteRoute } = useData();
+  const { rescueRoutes, createRoute, updateRoute, deleteRoute, areas } = useData();
   const toast = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editRoute, setEditRoute] = useState(null);
@@ -71,7 +70,7 @@ export default function RescueRoutes() {
   const STATUS_DISPLAY = { OPEN: { label: '🟢 Thông thoáng', bg: '#f0fdf4', color: '#15803d' }, CAUTION: { label: '🟡 Cẩn thận', bg: '#fefce8', color: '#854d0e' }, FLOODED: { label: '🔴 Bị ngập', bg: '#fef2f2', color: '#991b1b' } };
 
   const handleSave = (form) => {
-    const area = AREAS.find(a => a.id === form.area_id);
+    const area = areas.find(a => a.id === form.area_id);
     if (editRoute) { updateRoute(editRoute.id, { ...form, area_name: area?.old_name }); toast.success('Đã cập nhật!'); }
     else { createRoute({ ...form, area_name: area?.old_name }); toast.success('Đã thêm tuyến!'); }
     setShowForm(false); setEditRoute(null);
@@ -121,7 +120,7 @@ export default function RescueRoutes() {
               <button onClick={() => { setShowForm(false); setEditRoute(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
             </div>
             <div style={{ padding: '1.5rem' }}>
-              <RouteForm initial={editRoute} onSave={handleSave} onClose={() => { setShowForm(false); setEditRoute(null); }} />
+              <RouteForm initial={editRoute} onSave={handleSave} onClose={() => { setShowForm(false); setEditRoute(null); }} areas={areas} />
             </div>
           </div>
         </div>

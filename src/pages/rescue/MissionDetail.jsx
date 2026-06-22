@@ -39,6 +39,7 @@ const NEXT_LABELS = {
   ASSIGNED: '✅ Nhận nhiệm vụ', ACCEPTED: '🚤 Bắt đầu di chuyển', MOVING: '🤝 Xác nhận tiếp cận',
   NEAR_VICTIM: '🤝 Xác nhận tiếp cận (GPS ✅)', ARRIVED_CONFIRMED: '⚡ Bắt đầu cứu hộ', RESCUING: null,
 };
+const SHOW_GPS_SIMULATION = import.meta.env.DEV;
 
 export default function MissionDetail() {
   const { currentUser } = useAuth();
@@ -81,10 +82,7 @@ export default function MissionDetail() {
         { enableHighAccuracy: true, maximumAge: 5000 }
       );
     } else {
-      // Mock GPS for demo
-      setMyPos([selectedMission?.victim_latitude + 0.0008, selectedMission?.victim_longitude + 0.0005]);
-      setTracking(true);
-      toast.info('Đang dùng vị trí mô phỏng (GPS không khả dụng)');
+      toast.error('Thiết bị không hỗ trợ GPS. Vui lòng nhập/cập nhật vị trí thủ công qua điều phối viên.');
     }
   };
 
@@ -117,7 +115,7 @@ export default function MissionDetail() {
 
   // Simulate approaching
   const simulateApproach = () => {
-    if (!selectedMission) return;
+    if (!SHOW_GPS_SIMULATION || !selectedMission) return;
     const near = [
       selectedMission.victim_latitude + 0.0003,
       selectedMission.victim_longitude + 0.0002,
@@ -248,9 +246,11 @@ export default function MissionDetail() {
               ) : (
                 <div style={{ color: '#94a3b8', fontSize: '0.82rem' }}>Chưa bật GPS. Nhấn "Bật GPS tracking" để theo dõi.</div>
               )}
-              <button className="btn btn-secondary btn-sm" style={{ marginTop: '0.75rem' }} onClick={simulateApproach}>
-                📡 Mô phỏng vị trí gần nạn nhân
-              </button>
+              {SHOW_GPS_SIMULATION && (
+                <button className="btn btn-secondary btn-sm" style={{ marginTop: '0.75rem' }} onClick={simulateApproach}>
+                  📡 Mô phỏng vị trí gần nạn nhân
+                </button>
+              )}
             </div>
 
             {/* Actions */}

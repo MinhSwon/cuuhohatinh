@@ -1,17 +1,16 @@
 import { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { Search } from 'lucide-react';
-import { AREAS } from '../../data/publicData';
 
 export default function VulnerableHouseholds() {
-  const { vulnerableHouseholds, citizenProfiles, users } = useData();
+  const { vulnerableHouseholds, citizenProfiles, users, areas } = useData();
   const [filterArea, setFilterArea] = useState('');
   const [filterType, setFilterType] = useState('');
 
   const enriched = vulnerableHouseholds.map(vh => {
     const profile = citizenProfiles.find(cp => cp.id === vh.citizen_profile_id);
     const user = profile ? users.find(u => u.id === profile.user_id) : null;
-    const area = AREAS.find(a => a.id === vh.area_id);
+    const area = areas.find(a => a.id === vh.area_id);
     return { ...vh, profile, user, area };
   });
 
@@ -57,7 +56,7 @@ export default function VulnerableHouseholds() {
       <div className="filter-bar">
         <select className="form-input form-select" style={{ width: 170 }} value={filterArea} onChange={e => setFilterArea(e.target.value)}>
           <option value="">Tất cả khu vực</option>
-          {AREAS.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
+          {areas.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
         </select>
       </div>
 
