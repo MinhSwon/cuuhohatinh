@@ -123,7 +123,7 @@ export function AdminSidebar({ isOpen, onClose }) {
   const { currentUser, logout } = useAuth();
   const { notifications, rescueRequests } = useData();
   const navigate = useNavigate();
-  const unreadCount = notifications.filter(n => !n.is_read && n.user_id === currentUser?.id).length;
+  const unreadCount = notifications.filter(n => !n.is_read && (!n.user_id || n.user_id === currentUser?.id)).length;
   const sosCount = rescueRequests.filter(r => r.sos_mode && r.status === 'PENDING').length;
 
   return (
@@ -163,7 +163,7 @@ export function AdminSidebar({ isOpen, onClose }) {
         )}
 
         {/* Nav */}
-        <nav style={{ flex: 1, padding: '0.375rem 0', overflowY: 'auto' }}>
+        <nav className="sidebar-nav-scroll" style={{ padding: '0.375rem 0' }}>
           {adminNavSections.map((section) => (
             <div key={section.label} className="sidebar-section">
               <div className="sidebar-section-label">{section.label}</div>
@@ -219,7 +219,7 @@ export function RescueSidebar({ isOpen, onClose }) {
 
         <UserChip name={currentUser?.full_name} role="Cứu hộ viên" avatarColor="#3a6b4a" />
 
-        <nav style={{ flex: 1, padding: '0.75rem 0.625rem' }}>
+        <nav className="sidebar-nav-scroll" style={{ padding: '0.75rem 0.625rem' }}>
           {navItems.map((item) => (
             <NavLink
               key={item.to}
@@ -265,7 +265,7 @@ export function CitizenSidebar({ isOpen, onClose }) {
 
         <UserChip name={currentUser?.full_name} role="Người dân" avatarColor="#4a6fa5" />
 
-        <nav style={{ flex: 1, padding: '0.75rem 0.625rem' }}>
+        <nav className="sidebar-nav-scroll" style={{ padding: '0.75rem 0.625rem' }}>
           {navItems.map((item) => (
             <NavLink
               key={item.to}

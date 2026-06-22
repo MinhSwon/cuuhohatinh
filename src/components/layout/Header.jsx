@@ -1,4 +1,4 @@
-﻿import { useState } from 'react';
+﻿import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Menu, Bell, LogOut, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
@@ -6,13 +6,53 @@ import { useData } from '../../contexts/DataContext';
 
 export function AdminHeader({ onMenuClick }) {
   const { currentUser, logout } = useAuth();
-  const { notifications, markNotificationRead, rescueRequests } = useData();
+  const { notifications, markNotificationRead, rescueRequests, realtimeStatus, lastBackendSyncAt, refreshBackend } = useData();
   const navigate = useNavigate();
   const [showNotifs, setShowNotifs] = useState(false);
   const [showUser, setShowUser] = useState(false);
+  const lastUrgentIdsRef = useRef(new Set());
 
-  const unread = notifications.filter(n => !n.is_read && n.user_id === currentUser?.id);
+  const visibleNotifications = useMemo(
+    () => notifications.filter(n => !n.user_id || n.user_id === currentUser?.id),
+    [notifications, currentUser?.id]
+  );
+  const unread = visibleNotifications.filter(n => !n.is_read);
+  const urgentUnread = unread.filter(n => ['NEED_SUPPORT', 'UNREACHABLE', 'AUTO_CHECKIN', 'RESCUE_REQUEST'].includes(n.type));
   const sosCount = rescueRequests.filter(r => r.sos_mode && r.status === 'PENDING').length;
+  const supportCount = rescueRequests.filter(r => r.status === 'NEED_SUPPORT').length;
+
+  useEffect(() => {
+    const urgentIds = new Set(urgentUnread.map(n => n.id));
+    const hasNewUrgent = [...urgentIds].some(id => !lastUrgentIdsRef.current.has(id));
+    lastUrgentIdsRef.current = urgentIds;
+    if (!hasNewUrgent || urgentUnread.length === 0) return;
+
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const oscillator = ctx.createOscillator();
+      const gain = ctx.createGain();
+      oscillator.type = 'sine';
+      oscillator.frequency.value = 880;
+      gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.45);
+      oscillator.connect(gain);
+      gain.connect(ctx.destination);
+      oscillator.start();
+      oscillator.stop(ctx.currentTime + 0.5);
+      setTimeout(() => ctx.close(), 700);
+    } catch (err) {
+      console.warn('Không thể phát âm thanh thông báo khẩn.', err);
+    }
+  }, [urgentUnread]);
+
+  const goToUrgent = () => {
+    setShowNotifs(false);
+    if (supportCount > 0) navigate('/admin/rescue-missions');
+    else navigate('/admin/rescue-requests');
+  };
 
   return (
     <header className="header">
@@ -30,6 +70,37 @@ export function AdminHeader({ onMenuClick }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+        {urgentUnread.length > 0 && (
+          <button
+            onClick={goToUrgent}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.375rem',
+              background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 8,
+              padding: '0.3rem 0.625rem', cursor: 'pointer',
+              color: '#be123c', fontSize: '0.7rem', fontWeight: 800,
+              boxShadow: '0 4px 14px rgba(190,18,60,0.12)',
+              animation: 'sosBlink 1s ease infinite',
+            }}
+            title="Có thông báo khẩn cần xử lý"
+          >
+            🚨 {urgentUnread.length} khẩn
+          </button>
+        )}
+
+        {supportCount > 0 && (
+          <button
+            onClick={() => navigate('/admin/rescue-missions')}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.375rem',
+              background: '#fff7ed', border: '1px solid #fed7aa', borderRadius: 8,
+              padding: '0.3rem 0.625rem', cursor: 'pointer',
+              color: '#c2410c', fontSize: '0.7rem', fontWeight: 800,
+            }}
+          >
+            🆘 {supportCount} cần hỗ trợ
+          </button>
+        )}
+
         {/* SOS urgent badge */}
         {sosCount > 0 && (
           <button
@@ -45,6 +116,24 @@ export function AdminHeader({ onMenuClick }) {
             🆘 {sosCount} SOS
           </button>
         )}
+
+        <button
+          onClick={() => refreshBackend?.()}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '0.35rem',
+            background: realtimeStatus === 'DISCONNECTED' ? '#fff7ed' : '#f8fafc',
+            border: `1px solid ${realtimeStatus === 'DISCONNECTED' ? '#fed7aa' : '#e2e8f0'}`,
+            borderRadius: 999,
+            padding: '0.25rem 0.55rem',
+            color: realtimeStatus === 'DISCONNECTED' ? '#c2410c' : '#64748b',
+            cursor: 'pointer',
+            fontSize: '0.64rem',
+            fontWeight: 700,
+          }}
+          title={`Realtime: ${realtimeStatus || 'IDLE'}${lastBackendSyncAt ? ` - Đồng bộ lần cuối ${new Date(lastBackendSyncAt).toLocaleTimeString('vi-VN')}` : ''}`}
+        >
+          {realtimeStatus === 'DISCONNECTED' ? '⚠️' : '●'} {realtimeStatus === 'DISCONNECTED' ? 'Dự phòng' : 'Live'}
+        </button>
 
         {/* Notifications */}
         <div style={{ position: 'relative' }}>
@@ -91,7 +180,7 @@ export function AdminHeader({ onMenuClick }) {
                 )}
               </div>
               <div style={{ overflowY: 'auto', flex: 1 }}>
-                {notifications.filter(n => n.user_id === currentUser?.id).slice(0, 10).map(n => (
+                {visibleNotifications.slice(0, 10).map(n => (
                   <div
                     key={n.id}
                     onClick={() => markNotificationRead(n.id)}
@@ -102,14 +191,14 @@ export function AdminHeader({ onMenuClick }) {
                       cursor: 'pointer',
                     }}
                   >
-                    <div style={{ fontSize: '0.75rem', fontWeight: 600, color: '#2a2520', marginBottom: 2 }}>{n.title}</div>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 600, color: ['NEED_SUPPORT', 'UNREACHABLE', 'RESCUE_REQUEST'].includes(n.type) ? '#be123c' : '#2a2520', marginBottom: 2 }}>{n.title}</div>
                     <div style={{ fontSize: '0.68rem', color: '#9e9282', lineHeight: 1.4 }}>{n.message}</div>
                     <div style={{ fontSize: '0.62rem', color: '#b8afa5', marginTop: 4 }}>
                       {new Date(n.created_at).toLocaleString('vi-VN')}
                     </div>
                   </div>
                 ))}
-                {notifications.filter(n => n.user_id === currentUser?.id).length === 0 && (
+                {visibleNotifications.length === 0 && (
                   <div style={{ padding: '2rem', textAlign: 'center', color: '#9e9282', fontSize: '0.78rem' }}>
                     Không có thông báo
                   </div>

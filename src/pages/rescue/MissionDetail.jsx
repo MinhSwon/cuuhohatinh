@@ -124,17 +124,46 @@ export default function MissionDetail() {
     toast.success('📍 Đã mô phỏng vị trí gần nạn nhân (trong vòng 100m)');
   };
 
-  const handleAdvanceStatus = () => {
+  const handleAdvanceStatus = async () => {
     if (!selectedMission) return;
     const next = NEXT_STATUS[selectedMission.status];
     if (!next) return;
-    updateMissionStatus(
-      selectedMission.id, next,
-      myPos ? { current_rescuer_latitude: myPos[0], current_rescuer_longitude: myPos[1] } : {},
-      'RESCUE_TEAM', currentUser?.id,
-      `Đội ${myTeam?.team_name} cập nhật trạng thái → ${next}`
-    );
-    toast.success(`Đã cập nhật: ${next}`);
+    try {
+      const result = await updateMissionStatus(
+        selectedMission.id, next,
+        myPos ? { current_rescuer_latitude: myPos[0], current_rescuer_longitude: myPos[1] } : {},
+        'RESCUE_TEAM', currentUser?.id,
+        `Đội ${myTeam?.team_name} cập nhật trạng thái → ${next}`
+      );
+      if (result?.queued) toast.warning('Đang mất mạng: trạng thái đã lưu tạm và sẽ tự gửi lại khi có mạng.');
+      else toast.success(`Đã cập nhật: ${next}`);
+    } catch (err) {
+      console.error('Không cập nhật được trạng thái nhiệm vụ:', err);
+      toast.error('Không cập nhật được trạng thái. Vui lòng thử lại.');
+    }
+  };
+
+  const reportMissionStatus = async (newStatus, note, successMessage) => {
+    if (!selectedMission) return;
+    try {
+      const result = await updateMissionStatus(
+        selectedMission.id,
+        newStatus,
+        myPos ? { current_rescuer_latitude: myPos[0], current_rescuer_longitude: myPos[1] } : {},
+        'RESCUE_TEAM',
+        currentUser?.id,
+        note
+      );
+
+      if (result?.queued) {
+        toast.warning('Đang offline: yêu cầu đã lưu tạm. Hệ thống sẽ tự gửi lại cho điều phối khi có mạng.');
+      } else {
+        toast.warning(successMessage);
+      }
+    } catch (err) {
+      console.error('Không gửi được cập nhật nhiệm vụ:', err);
+      toast.error('Không gửi được cập nhật. Vui lòng thử lại hoặc gọi trực tiếp điều phối viên.');
+    }
   };
 
   const handleMarkNearVictim = () => {
@@ -276,11 +305,11 @@ export default function MissionDetail() {
                 )}
 
                 <button className="btn btn-danger btn-sm" style={{ width: '100%', justifyContent: 'center' }}
-                  onClick={() => { if (window.confirm('Báo cáo không liên lạc được?')) { updateMissionStatus(selectedMission.id, 'UNREACHABLE', {}, 'RESCUE_TEAM', currentUser?.id, 'Đội cứu hộ báo cáo: Không thể liên lạc'); toast.warning('Đã báo cáo không liên lạc'); } }}>
+                  onClick={() => { if (window.confirm('Báo cáo không liên lạc được?')) reportMissionStatus('UNREACHABLE', 'Đội cứu hộ báo cáo: Không thể liên lạc', 'Đã báo cáo không liên lạc cho điều phối'); }}>
                   📵 Báo cáo không liên lạc
                 </button>
                 <button className="btn btn-warning btn-sm" style={{ width: '100%', justifyContent: 'center' }}
-                  onClick={() => { updateMissionStatus(selectedMission.id, 'NEED_SUPPORT', {}, 'RESCUE_TEAM', currentUser?.id, 'Đội cứu hộ yêu cầu hỗ trợ thêm'); toast.warning('Đã gửi yêu cầu hỗ trợ!'); }}>
+                  onClick={() => reportMissionStatus('NEED_SUPPORT', 'Đội cứu hộ yêu cầu hỗ trợ thêm', 'Đã gửi yêu cầu hỗ trợ cho điều phối!')}>
                   🆘 Yêu cầu hỗ trợ thêm
                 </button>
               </div>

@@ -47,6 +47,8 @@ export function DataProvider({ children }) {
   const [offlineQueueCount, setOfflineQueueCount] = useState(0);
   const [offlineSyncing, setOfflineSyncing] = useState(false);
   const [sessionKey, setSessionKey] = useState(() => localStorage.getItem('currentUser') || '');
+  const [realtimeStatus, setRealtimeStatus] = useState('IDLE');
+  const [lastBackendSyncAt, setLastBackendSyncAt] = useState(null);
 
   const applyBackendState = useCallback((data) => {
     if (data.areas) setAreas(data.areas);
@@ -66,6 +68,7 @@ export function DataProvider({ children }) {
     if (data.activityLogs) setActivityLogs(data.activityLogs);
     if (data.notifications) setNotifications(data.notifications);
     setDbSynced(true);
+    setLastBackendSyncAt(new Date().toISOString());
   }, []);
 
   const syncWithBackend = useCallback(async () => {
@@ -73,6 +76,7 @@ export function DataProvider({ children }) {
       if (!hasLocalSession()) return;
       const res = await axios.get('/api/db');
       applyBackendState(res.data);
+      return res.data;
     } catch (err) {
       if (err.response?.status === 401) {
         localStorage.removeItem('currentUser');
@@ -114,18 +118,22 @@ export function DataProvider({ children }) {
     if (!sessionKey) return undefined;
 
     const events = new EventSource(getEventStreamUrl(), { withCredentials: true });
+    setRealtimeStatus('CONNECTING');
 
     const handleDbUpdate = (event) => {
       try {
         const payload = JSON.parse(event.data);
+        setRealtimeStatus('CONNECTED');
         if (payload.data) applyBackendState(payload.data);
       } catch (err) {
         console.warn('Realtime update payload is invalid.', err);
       }
     };
 
+    events.onopen = () => setRealtimeStatus('CONNECTED');
     events.addEventListener('db:update', handleDbUpdate);
     events.onerror = () => {
+      setRealtimeStatus('DISCONNECTED');
       console.warn('Realtime stream disconnected. Browser will retry automatically.');
     };
 
@@ -134,6 +142,17 @@ export function DataProvider({ children }) {
       events.close();
     };
   }, [applyBackendState, sessionKey]);
+
+  useEffect(() => {
+    if (!sessionKey) return undefined;
+
+    const interval = window.setInterval(() => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      syncWithBackend();
+    }, realtimeStatus === 'DISCONNECTED' ? 4000 : 7000);
+
+    return () => window.clearInterval(interval);
+  }, [realtimeStatus, sessionKey, syncWithBackend]);
 
   useEffect(() => {
     const syncSession = () => {
@@ -387,9 +406,8 @@ export function DataProvider({ children }) {
       
       // Load updated request status and status logs from backend
       const dbRes = await axios.get('/api/db');
-      if (dbRes.data.rescueRequests) setRescueRequests(dbRes.data.rescueRequests);
-      if (dbRes.data.missionStatusLogs) setMissionStatusLogs(dbRes.data.missionStatusLogs);
-      if (dbRes.data.rescueTeams) setRescueTeams(dbRes.data.rescueTeams);
+      applyBackendState(dbRes.data);
+      return res.data;
     } catch (err) {
       if (!shouldUseOfflineFallback(err)) throw err;
       await enqueueOfflineAction('UPDATE_MISSION_STATUS', {
@@ -431,8 +449,13 @@ export function DataProvider({ children }) {
         }
         return prev;
       });
+      return {
+        queued: true,
+        missionId,
+        newStatus,
+      };
     }
-  }, []);
+  }, [applyBackendState]);
 
   const mapMissionStatusToRequest = (missionStatus) => {
     const map = {
@@ -646,6 +669,9 @@ export function DataProvider({ children }) {
       isOnline,
       offlineQueueCount,
       offlineSyncing,
+      realtimeStatus,
+      lastBackendSyncAt,
+      refreshBackend: syncWithBackend,
       syncOfflineQueue,
       // Actions
       addLog, addNotification, markNotificationRead,
