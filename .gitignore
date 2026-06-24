@@ -26,3 +26,9 @@ db.json
 *.njsproj
 *.sln
 *.sw?
+
+# Local reports and generated documents
+Bai_1_2_Bao_cao_quan_tri_du_an_so_FloodGuard*.docx
+Bang_phan_cong_10_tuan_FloodGuard.docx
+backups/
+docx_render_check/
