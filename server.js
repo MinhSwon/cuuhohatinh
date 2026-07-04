@@ -749,7 +749,28 @@ function getEsmsStatus(responseData) {
   return code === '100' ? 'SENT' : 'FAILED';
 }
 
+function shortenRequestId(requestId) {
+  if (!requestId) return '';
+  const parts = requestId.split('-');
+  const rrIdx = parts.findIndex(p => p.startsWith('rr'));
+  if (rrIdx !== -1 && parts[rrIdx + 1] && parts[rrIdx + 1].length === 8) {
+    const prefix = parts[rrIdx];
+    const uuidShort = parts[rrIdx + 1];
+    const suffixParts = parts.slice(rrIdx + 5);
+    const mappedSuffix = suffixParts.map(s => {
+      if (s === 'coordinator') return 'coor';
+      if (s === 'reporter') return 'rep';
+      if (s === 'confirm') return 'conf';
+      if (s === 'assigned') return 'assg';
+      return s;
+    });
+    return [prefix, uuidShort, ...mappedSuffix].join('-');
+  }
+  return requestId.slice(0, 50);
+}
+
 async function sendEsmsSms({ phone, content, requestId, relatedWarningId, relatedRequestId, recipient }) {
+  const shortRequestId = shortenRequestId(requestId);
   const normalizedPhone = normalizeVietnamPhone(phone);
   if (!normalizedPhone) {
     return addSmsLog({
@@ -759,7 +780,7 @@ async function sendEsmsSms({ phone, content, requestId, relatedWarningId, relate
       status: 'FAILED',
       provider: 'eSMS',
       channel: 'sms',
-      request_id: requestId,
+      request_id: shortRequestId,
       related_warning_id: relatedWarningId,
       related_request_id: relatedRequestId,
       error: 'Missing receiver phone',
@@ -774,25 +795,26 @@ async function sendEsmsSms({ phone, content, requestId, relatedWarningId, relate
       status: 'FAILED',
       provider: 'eSMS',
       channel: 'sms',
-      request_id: requestId,
+      request_id: shortRequestId,
       related_warning_id: relatedWarningId,
       related_request_id: relatedRequestId,
       error: 'eSMS is not configured. Set ESMS_API_KEY, ESMS_SECRET_KEY, ESMS_BRANDNAME.',
     });
   }
 
+  const useBrandname = ESMS_BRANDNAME && ESMS_BRANDNAME !== 'CUUHO';
   const body = {
     ApiKey: ESMS_API_KEY,
     SecretKey: ESMS_SECRET_KEY,
-    Brandname: ESMS_BRANDNAME,
+    Brandname: useBrandname ? ESMS_BRANDNAME : '',
     Phone: normalizedPhone,
     Content: content,
-    SmsType: '2',
+    SmsType: useBrandname ? '2' : '8',
     IsUnicode: '1',
     Sandbox: ESMS_SANDBOX,
-    RequestId: requestId,
+    RequestId: shortRequestId,
   };
-  const callbackUrl = getEsmsCallbackUrl(requestId);
+  const callbackUrl = getEsmsCallbackUrl(shortRequestId);
   if (callbackUrl) body.CallbackUrl = callbackUrl;
 
   try {
@@ -805,7 +827,7 @@ async function sendEsmsSms({ phone, content, requestId, relatedWarningId, relate
       status,
       provider: 'eSMS',
       channel: 'sms',
-      request_id: requestId,
+      request_id: shortRequestId,
       provider_message_id: response.data?.SMSID || null,
       related_warning_id: relatedWarningId,
       related_request_id: relatedRequestId,
@@ -820,7 +842,7 @@ async function sendEsmsSms({ phone, content, requestId, relatedWarningId, relate
       status: 'FAILED',
       provider: 'eSMS',
       channel: 'sms',
-      request_id: requestId,
+      request_id: shortRequestId,
       related_warning_id: relatedWarningId,
       related_request_id: relatedRequestId,
       error: err?.message || 'eSMS request failed',
@@ -838,19 +860,21 @@ async function sendEsmsZaloThenSms({
   relatedRequestId,
   recipient,
 }) {
+  const shortRequestId = shortenRequestId(requestId);
   if (!hasEsmsZaloConfig(templateId)) {
     return sendEsmsSms({
       phone,
       content: smsContent,
-      requestId: `${requestId}-sms`,
+      requestId: `${shortRequestId}-sms`,
       relatedWarningId,
       relatedRequestId,
       recipient,
     });
   }
 
+  const useBrandname = ESMS_BRANDNAME && ESMS_BRANDNAME !== 'CUUHO';
   const normalizedPhone = normalizeVietnamPhone(phone);
-  const callbackUrl = getEsmsCallbackUrl(requestId);
+  const callbackUrl = getEsmsCallbackUrl(shortRequestId);
   const body = {
     ApiKey: ESMS_API_KEY,
     SecretKey: ESMS_SECRET_KEY,
@@ -861,7 +885,7 @@ async function sendEsmsZaloThenSms({
         TempID: templateId,
         Params: params.map(value => String(value ?? '')),
         OAID: ZALO_OA_ID,
-        RequestId: `${requestId}-zalo`,
+        RequestId: `${shortRequestId}-zalo`,
         Sandbox: ESMS_SANDBOX,
         SendingMode: '1',
         ...(callbackUrl ? { CallbackUrl: callbackUrl } : {}),
@@ -869,9 +893,9 @@ async function sendEsmsZaloThenSms({
       {
         Content: smsContent,
         IsUnicode: '1',
-        SmsType: '2',
-        Brandname: ESMS_BRANDNAME,
-        RequestId: `${requestId}-sms`,
+        SmsType: useBrandname ? '2' : '8',
+        Brandname: useBrandname ? ESMS_BRANDNAME : '',
+        RequestId: `${shortRequestId}-sms`,
         Sandbox: ESMS_SANDBOX,
         ...(callbackUrl ? { CallbackUrl: callbackUrl } : {}),
       },
@@ -888,7 +912,7 @@ async function sendEsmsZaloThenSms({
       status,
       provider: 'eSMS',
       channel: 'zalo_sms',
-      request_id: requestId,
+      request_id: shortRequestId,
       provider_message_id: response.data?.SMSID || null,
       related_warning_id: relatedWarningId,
       related_request_id: relatedRequestId,
@@ -903,7 +927,7 @@ async function sendEsmsZaloThenSms({
       status: 'FAILED',
       provider: 'eSMS',
       channel: 'zalo_sms',
-      request_id: requestId,
+      request_id: shortRequestId,
       related_warning_id: relatedWarningId,
       related_request_id: relatedRequestId,
       error: err?.message || 'eSMS multi-channel request failed',
@@ -1285,7 +1309,14 @@ function findUserById(id) {
 }
 
 function getRequestToken(req) {
-  return getCookieValue(req, AUTH_COOKIE_NAME);
+  const cookieToken = getCookieValue(req, AUTH_COOKIE_NAME);
+  if (cookieToken) return cookieToken;
+
+  const authHeader = req.headers.authorization || req.headers.Authorization || '';
+  if (authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+  return null;
 }
 
 function authenticateOptional(req, res, next) {
@@ -1937,7 +1968,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     const token = issueToken(user);
     setAuthCookie(res, token);
 
-    return res.json({ success: true, user: userForClient, profile: profile || null });
+    return res.json({ success: true, token, user: userForClient, profile: profile || null });
   } catch (err) {
     console.error('Login route failed:', err);
     return res.status(500).json({

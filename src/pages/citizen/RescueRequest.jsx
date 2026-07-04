@@ -157,8 +157,8 @@ export default function RescueRequest() {
                 {[
                   { value: 'LOW', label: '🟡 Không khẩn cấp', color: '#eab308' },
                   { value: 'MEDIUM', label: '🟠 Cần hỗ trợ', color: '#f97316' },
-                  { value: 'HIGH', label: '🔴 Khẩn cấp', color: '#ef4444' },
-                  { value: 'EMERGENCY', label: '🚨 Nguy hiểm tính mạng', color: '#dc2626' },
+                  { value: 'HIGH', label: '🔴 Mức cao', color: '#ef4444' },
+                  { value: 'EMERGENCY', label: '🚨 Khẩn cấp', color: '#dc2626' },
                 ].map(opt => (
                   <button key={opt.value} type="button"
                     onClick={() => setForm(f => ({ ...f, emergency_level: opt.value }))}
