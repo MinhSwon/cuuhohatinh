@@ -7,7 +7,7 @@
     "dev": "vite",
     "server": "node server.js",
     "start": "node scripts/start-server.js",
-    "build": "prisma generate && vite build",
+    "build": "prisma generate && vite build frontend --config frontend/vite.config.js --outDir ../dist --emptyOutDir",
     "android:sync": "npm run build && npx cap sync android",
     "android:open": "npm run android:sync && npx cap open android",
     "db:create": "node scripts/create-prisma-database.js",
