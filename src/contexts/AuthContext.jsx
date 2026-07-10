@@ -1,9 +1,10 @@
-import { createContext, useContext, useState, useCallback } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import axios from 'axios';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
+  const [authReady, setAuthReady] = useState(false);
   const [currentUser, setCurrentUser] = useState(() => {
     const saved = localStorage.getItem('currentUser');
     try {
@@ -22,6 +23,40 @@ export function AuthProvider({ children }) {
       return null;
     }
   });
+
+  const clearLocalSession = useCallback(() => {
+    setCurrentUser(null);
+    setCurrentProfile(null);
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('currentProfile');
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    axios.get('/api/auth/session')
+      .then(res => {
+        if (!active) return;
+        const { user, profile } = res.data;
+        setCurrentUser(user);
+        setCurrentProfile(profile || null);
+        localStorage.setItem('currentUser', JSON.stringify(user));
+        if (profile) localStorage.setItem('currentProfile', JSON.stringify(profile));
+        else localStorage.removeItem('currentProfile');
+      })
+      .catch(err => {
+        if (!active) return;
+        clearLocalSession();
+        if (err.response?.status !== 401) {
+          console.warn('Không thể xác thực phiên đăng nhập với máy chủ.', err);
+        }
+      })
+      .finally(() => {
+        if (active) setAuthReady(true);
+      });
+
+    return () => { active = false; };
+  }, [clearLocalSession]);
 
   const login = useCallback(async (emailOrPhone, password) => {
     try {
@@ -50,12 +85,9 @@ export function AuthProvider({ children }) {
     } catch (err) {
       console.warn('Logout request failed; clearing local session anyway.', err);
     }
-    setCurrentUser(null);
-    setCurrentProfile(null);
-    localStorage.removeItem('currentUser');
-    localStorage.removeItem('currentProfile');
+    clearLocalSession();
     window.dispatchEvent(new Event('auth:session-changed'));
-  }, []);
+  }, [clearLocalSession]);
 
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'SUPER_ADMIN';
   const isRescue = currentUser?.role === 'RESCUE_LEADER' || currentUser?.role === 'RESCUE_MEMBER';
@@ -72,6 +104,7 @@ export function AuthProvider({ children }) {
       isRescue,
       isCitizen,
       isLoggedIn: !!currentUser,
+      authReady,
     }}>
       {children}
     </AuthContext.Provider>

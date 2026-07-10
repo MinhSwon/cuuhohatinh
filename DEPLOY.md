@@ -50,6 +50,7 @@ SEED_RESCUE_PASSWORD=doi-mat-khau-cuu-ho-moi
 SEED_CITIZEN_PASSWORD=doi-mat-khau-nguoi-dan-moi
 DB_CONNECT_RETRIES=8
 DB_CONNECT_RETRY_DELAY_MS=3000
+ALLOW_JSON_FALLBACK=false
 ```
 
 Ghi chu:
@@ -57,7 +58,8 @@ Ghi chu:
 - `PORT` thuong duoc hosting tu gan, khong can dat tren Render.
 - `CLIENT_ORIGINS` co the bo trong neu frontend va API chay cung domain.
 - Khi co `DATABASE_URL`, Prisma se ket noi PostgreSQL va quan ly cac bang quan he.
-- Tren Render nen luon cau hinh `DATABASE_URL`; `db.json` chi phu hop de chay local va khong duoc commit len Git.
+- Tren Render bat buoc cau hinh `DATABASE_URL`; backend se dung khoi dong neu PostgreSQL loi. `db.json` chi phu hop de chay local va khong duoc commit len Git.
+- Khong bat `ALLOW_JSON_FALLBACK=true` tren Render, vi o dia tam co the bi xoa khi restart/deploy.
 - `PGSSL=true` thuong can cho database tren hosting. Neu PostgreSQL chay local bang pgAdmin thi de `PGSSL=false`.
 - Neu Render bao `getaddrinfo ENOTFOUND dpg-...` luc khoi dong, thu tang `DB_CONNECT_RETRIES` hoac `DB_CONNECT_RETRY_DELAY_MS` de backend doi PostgreSQL san sang truoc khi thoat.
 - `JWT_SECRET` bat buoc tren Render/production. Co the tao bang `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`.
@@ -97,12 +99,12 @@ npm start
 
 Trong pgAdmin, mo database `flood_rescue` de xem cac bang Prisma da tao.
 
-## Quy mo 30-50 nguoi
+## Checklist van hanh production
 
-Cau hinh PostgreSQL hien tai phu hop hon `db.json` cho demo/nhom nho 30-50 nguoi voi luu luong vua phai.
+Truoc khi mo cho nguoi dung that:
 
-Neu dung that lau dai, nen nang cap tiep:
-
-- Them backup du lieu tu dong.
-- Them monitoring/logging loi.
-- Chuyen token dang nhap sang cookie `HttpOnly` neu can tang muc chong XSS.
+- Bat backup PostgreSQL va thu khoi phuc du lieu dinh ky.
+- Cau hinh uptime check cho `/api/health`, readiness check cho `/api/readiness`, va alert log 5xx.
+- Chay `npm run check` trong CI truoc moi lan deploy.
+- Doi toan bo mat khau demo, luu secret trong Render Environment, khong ghi vao Git.
+- Test SMS callback, GPS va quy trinh dieu phoi tren thiet bi that; dat nguong tai va chay load test theo so nguoi dung muc tieu.

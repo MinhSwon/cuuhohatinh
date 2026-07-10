@@ -43,7 +43,8 @@ import CitizenWarnings from './pages/citizen/CitizenWarnings';
 import CitizenSafeZones from './pages/citizen/CitizenSafeZones';
 
 function RoleRedirect() {
-  const { currentUser } = useAuth();
+  const { currentUser, authReady } = useAuth();
+  if (!authReady) return <div className="page-loading">Đang xác thực phiên đăng nhập…</div>;
   if (!currentUser) return <Navigate to="/login" replace />;
   const role = currentUser.role;
   if (role === 'ADMIN' || role === 'SUPER_ADMIN') return <Navigate to="/admin" replace />;
@@ -52,7 +53,8 @@ function RoleRedirect() {
 }
 
 function RequireAuth({ children, roles }) {
-  const { currentUser } = useAuth();
+  const { currentUser, authReady } = useAuth();
+  if (!authReady) return <div className="page-loading">Đang xác thực phiên đăng nhập…</div>;
   if (!currentUser) return <Navigate to="/login" replace />;
   if (roles && !roles.includes(currentUser.role)) return <Navigate to="/" replace />;
   return children;

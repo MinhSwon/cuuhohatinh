@@ -48,6 +48,7 @@ axios.interceptors.response.use(
     if (error.response?.status === 401) {
       localStorage.removeItem('currentUser');
       localStorage.removeItem('currentProfile');
+      window.dispatchEvent(new Event('auth:session-changed'));
     }
 
     return Promise.reject(error);

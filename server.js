@@ -16,6 +16,13 @@ import pg from 'pg';
 
 import { getEmbedding, searchCollection } from './vectorDb.js';
 import {
+  canTransitionMission,
+  canUserAccessMission,
+  getUserTeamIds,
+  isValidMissionStatus,
+  sanitizeMissionUpdate,
+} from './src/server/missionPolicy.js';
+import {
   AREAS, USERS, CITIZEN_PROFILES, VULNERABLE_HOUSEHOLDS,
   FLOOD_WARNINGS, RESCUE_REQUESTS, RESCUE_MISSIONS, MISSION_STATUS_LOGS,
   RESCUE_TEAMS, SAFE_ZONES, RESCUE_ROUTES, DAMS, SMS_LOGS,
@@ -32,6 +39,7 @@ const JWT_SECRET = process.env.JWT_SECRET || crypto.randomBytes(32).toString('ba
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '8h';
 const AUTH_COOKIE_NAME = process.env.AUTH_COOKIE_NAME || 'fg_session';
 const IS_DEPLOYED_RUNTIME = process.env.NODE_ENV === 'production' || process.env.RENDER === 'true';
+const ALLOW_JSON_FALLBACK = process.env.ALLOW_JSON_FALLBACK === 'true' || !IS_DEPLOYED_RUNTIME;
 const DB_CONNECT_RETRIES = Number(process.env.DB_CONNECT_RETRIES || 8);
 const DB_CONNECT_RETRY_DELAY_MS = Number(process.env.DB_CONNECT_RETRY_DELAY_MS || 3000);
 const DB_FILE = process.env.DB_FILE ? path.resolve(process.env.DB_FILE) : path.join(__dirname, 'db.json');
@@ -70,6 +78,10 @@ app.set('trust proxy', 1);
 
 if (IS_DEPLOYED_RUNTIME && !process.env.JWT_SECRET) {
   throw new Error('JWT_SECRET is required in production/Render');
+}
+
+if (IS_DEPLOYED_RUNTIME && !DATABASE_URL && !ALLOW_JSON_FALLBACK) {
+  throw new Error('DATABASE_URL is required in production. Set ALLOW_JSON_FALLBACK=true only for an intentional single-instance deployment.');
 }
 
 if (!process.env.JWT_SECRET) {
@@ -112,6 +124,11 @@ app.use(cors({
   },
   credentials: true,
 }));
+app.use((req, res, next) => {
+  req.requestId = req.get('x-request-id') || crypto.randomUUID();
+  res.setHeader('X-Request-Id', req.requestId);
+  next();
+});
 app.use(express.json({ limit: '1mb' }));
 
 const apiRateLimit = parsePositiveInt(
@@ -195,6 +212,10 @@ let db = {
 const COLLECTION_NAMES = Object.keys(db);
 const ADMIN_ROLES = ['ADMIN', 'SUPER_ADMIN'];
 const RESCUE_ROLES = ['RESCUE_LEADER', 'RESCUE_MEMBER'];
+const LOGIN_ALIASES = new Map([
+  ['rescue@floodguard.vn', 'doicuuho1@floodguard.vn'],
+  ['user@floodguard.vn', 'nguoidan1@gmail.com'],
+]);
 const DANGEROUS_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
 const TEST_SAFE_ZONE_NAME_PATTERN = /\b(test|fake|stress|demo|sample|dummy)\b/i;
 const WARNING_FIELDS = ['title', 'content', 'level', 'status', 'area_id', 'area_name', 'start_time', 'end_time'];
@@ -644,12 +665,6 @@ const rescueRequestLimiter = rateLimit({
     message: 'So dien thoai nay gui qua nhieu yeu cau cuu ho. Vui long goi truc tiep doi dieu phoi neu la tinh huong khan cap.',
   },
 });
-
-function maskPhone(phone) {
-  const normalized = normalizeVietnamPhone(phone);
-  if (normalized.length < 6) return normalized;
-  return `${normalized.slice(0, 4)}***${normalized.slice(-3)}`;
-}
 
 function getEsmsCallbackUrl(requestId) {
   if (!ESMS_CALLBACK_URL) return undefined;
@@ -1107,14 +1122,10 @@ function sanitizeDbForUser(user) {
 
   if (RESCUE_ROLES.includes(user.role)) {
     const teams = Array.isArray(db.rescueTeams) ? db.rescueTeams : [];
-    const visibleTeamIds = new Set(
-      teams
-        .filter(team => team.leader_user_id === user.id || team.leader_id === user.id || team.user_id === user.id)
-        .map(team => team.id)
-    );
+    const visibleTeamIds = getUserTeamIds(teams, user.id);
 
     const missions = Array.isArray(db.rescueMissions)
-      ? db.rescueMissions.filter(m => visibleTeamIds.size === 0 || visibleTeamIds.has(m.rescue_team_id))
+      ? db.rescueMissions.filter(m => visibleTeamIds.has(m.rescue_team_id))
       : [];
     const visibleRequestIds = new Set(missions.map(m => m.rescue_request_id));
 
@@ -1124,7 +1135,7 @@ function sanitizeDbForUser(user) {
       rescueRoutes: db.rescueRoutes,
       rescueMissions: missions,
       rescueRequests: Array.isArray(db.rescueRequests)
-        ? db.rescueRequests.filter(r => visibleRequestIds.size === 0 || visibleRequestIds.has(r.id) || visibleTeamIds.has(r.assigned_team_id))
+        ? db.rescueRequests.filter(r => visibleRequestIds.has(r.id) || visibleTeamIds.has(r.assigned_team_id))
         : [],
       missionStatusLogs: Array.isArray(db.missionStatusLogs)
         ? db.missionStatusLogs.filter(log => missions.some(m => m.id === log.mission_id))
@@ -1214,7 +1225,9 @@ async function sanitizeDbForUserFromPostgres(user) {
   });
 }
 
-function applySeedPasswords() {
+const SEED_USER_IDS = new Set(USERS.map(user => user.id));
+
+function applySeedPasswords({ overwriteConfiguredSeedUsers = false } = {}) {
   if (!Array.isArray(db.users)) return;
 
   const seedPasswords = {
@@ -1226,11 +1239,16 @@ function applySeedPasswords() {
   };
 
   for (const user of db.users) {
-    if (user.password_hash || user.passwordHash) continue;
-
     const seedPassword = seedPasswords[user.role];
+    const storedPassword = String(user.password_hash || user.passwordHash || '');
+    const mayOverwrite = overwriteConfiguredSeedUsers && SEED_USER_IDS.has(user.id) && seedPassword;
+    if (storedPassword && !mayOverwrite) continue;
+
     if (seedPassword) {
-      user.password_hash = bcrypt.hashSync(seedPassword, 12);
+      if (!storedPassword || !bcrypt.compareSync(seedPassword, storedPassword)) {
+        user.password_hash = bcrypt.hashSync(seedPassword, 12);
+      }
+      user.status = 'ACTIVE';
     } else {
       user.status = 'BLOCKED';
       console.warn(`Seed user ${user.id} is blocked because no seed password was configured.`);
@@ -1319,23 +1337,26 @@ function getRequestToken(req) {
   return null;
 }
 
-function authenticateOptional(req, res, next) {
+async function authenticateOptional(req, res, next) {
   const token = getRequestToken(req);
 
   if (!token) return next();
 
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    const user = findUserById(payload.sub);
-    if (user && user.status !== 'BLOCKED') {
+    let user = findUserById(payload.sub);
+    if (pool) {
+      const result = await pool.query(
+        `SELECT id, full_name, phone, email, password_hash, role::text, status::text, avatar, created_at, updated_at
+         FROM users WHERE id = $1 LIMIT 1`,
+        [payload.sub]
+      );
+      user = userRowToApi(result.rows[0]);
+    }
+    if (user && user.status === 'ACTIVE') {
       req.user = safeUser(user);
-    } else if (payload.sub && payload.role) {
-      req.user = safeUser({
-        id: payload.sub,
-        full_name: payload.name || '',
-        role: payload.role,
-        status: 'ACTIVE',
-      });
+    } else {
+      req.authError = true;
     }
   } catch {
     req.authError = true;
@@ -1616,8 +1637,6 @@ async function syncRelationalTablesFromState() {
       }
     }
 
-  } catch (err) {
-    throw err;
   } finally {
     client.release();
   }
@@ -1678,7 +1697,10 @@ async function initializePostgresWithRetry() {
       console.error(`PostgreSQL initialization failed (attempt ${attempt}/${attempts}):`, err.message);
 
       if (isLastAttempt) {
-        console.warn('PostgreSQL is unavailable. Falling back to JSON database so the web service can still start.');
+        if (!ALLOW_JSON_FALLBACK) {
+          throw new Error('PostgreSQL is unavailable and JSON fallback is disabled', { cause: err });
+        }
+        console.warn('PostgreSQL is unavailable. ALLOW_JSON_FALLBACK permits startup with the JSON database.');
         try {
           await pool.end();
         } catch (closeErr) {
@@ -1774,11 +1796,15 @@ if (!usingPostgres && fs.existsSync(DB_FILE)) {
   console.log('Database successfully seeded and saved to db.json');
 }
 
+// Re-apply only configured demo credentials after loading persisted state.
+// This repairs stale hashes on deploy without touching registered real users.
+applySeedPasswords({ overwriteConfiguredSeedUsers: true });
 hardenLegacyPasswords();
 
 if (usingPostgres) {
   await syncRelationalTablesFromState();
 }
+saveDb();
 
 // ---------------------- API ROUTES ----------------------
 
@@ -1814,6 +1840,36 @@ app.get('/api/readiness', async (req, res) => {
       latency_ms: Date.now() - startedAt,
       timestamp: new Date().toISOString()
     });
+  }
+});
+
+app.get('/api/auth/session', requireAuth, async (req, res) => {
+  try {
+    let user = findUserById(req.user.id) || req.user;
+    let profile = null;
+
+    if (pool) {
+      const userResult = await pool.query(
+        `SELECT id, full_name, phone, email, password_hash, role::text, status::text, avatar, created_at, updated_at
+         FROM users WHERE id = $1 LIMIT 1`,
+        [req.user.id]
+      );
+      user = userRowToApi(userResult.rows[0]);
+      if (!user || user.status !== 'ACTIVE') {
+        clearAuthCookie(res);
+        return res.status(401).json({ error: 'Session is no longer active' });
+      }
+      const profileResult = await pool.query('SELECT * FROM citizen_profiles WHERE user_id = $1 LIMIT 1', [user.id]);
+      profile = citizenProfileRowToApi(profileResult.rows[0]);
+    } else {
+      profile = (Array.isArray(db.citizenProfiles) ? db.citizenProfiles : [])
+        .find(item => item.user_id === user.id) || null;
+    }
+
+    return res.json({ success: true, user: safeUser(user), profile });
+  } catch (err) {
+    console.error('Session validation failed:', err);
+    return res.status(503).json({ error: 'Session validation unavailable' });
   }
 });
 
@@ -1908,7 +1964,8 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
   try {
     const normalize = value => (typeof value === 'string' ? value.trim() : '');
     const { emailOrPhone, password } = req.body || {};
-    const credential = normalize(emailOrPhone).toLowerCase();
+    const submittedCredential = normalize(emailOrPhone).toLowerCase();
+    const credential = LOGIN_ALIASES.get(submittedCredential) || submittedCredential;
     const phoneCredential = normalize(emailOrPhone).replace(/[\s.-]/g, '');
     const plainPassword = normalize(password);
 
@@ -1948,7 +2005,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
       });
     }
 
-    if (!user || user.status === 'BLOCKED' || !(await verifyPassword(user, plainPassword))) {
+    if (!user || user.status !== 'ACTIVE' || !(await verifyPassword(user, plainPassword))) {
       return res.status(401).json({
         success: false,
         message: 'Sai tai khoan hoac mat khau'
@@ -1968,7 +2025,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     const token = issueToken(user);
     setAuthCookie(res, token);
 
-    return res.json({ success: true, token, user: userForClient, profile: profile || null });
+    return res.json({ success: true, user: userForClient, profile: profile || null });
   } catch (err) {
     console.error('Login route failed:', err);
     return res.status(500).json({
@@ -2567,8 +2624,31 @@ app.post('/api/missions/:id/status', requireRoles([...ADMIN_ROLES, ...RESCUE_ROL
   const mission = db.rescueMissions[missionIdx];
   const oldStatus = mission.status;
 
+  if (!isValidMissionStatus(newStatus)) {
+    return res.status(400).json({ error: 'Invalid mission status' });
+  }
+
+  if (!canTransitionMission(oldStatus, newStatus)) {
+    return res.status(409).json({
+      error: 'Invalid mission status transition',
+      oldStatus,
+      newStatus,
+    });
+  }
+
+  if (RESCUE_ROLES.includes(req.user.role)
+    && !canUserAccessMission(db.rescueTeams, req.user.id, mission)) {
+    return res.status(403).json({ error: 'Mission is not assigned to your rescue team' });
+  }
+
   // Update mission
-  db.rescueMissions[missionIdx] = { ...mission, status: newStatus, ...sanitizeObject(extraData) };
+  const safeExtraData = sanitizeObject(sanitizeMissionUpdate(extraData));
+  db.rescueMissions[missionIdx] = {
+    ...mission,
+    status: newStatus,
+    ...safeExtraData,
+    updated_at: new Date().toISOString(),
+  };
 
   // Log status change
   const logEntry = {
@@ -2876,6 +2956,16 @@ app.use('/api', (req, res) => {
   res.status(404).json({ error: 'API endpoint not found' });
 });
 
+app.use((err, req, res, next) => {
+  if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
+    return res.status(400).json({ error: 'Invalid JSON body', requestId: req.requestId });
+  }
+
+  console.error(`Unhandled request error [${req.requestId}]:`, err);
+  if (res.headersSent) return next(err);
+  return res.status(500).json({ error: 'Internal server error', requestId: req.requestId });
+});
+
 // Serve the production React build from the same domain as the API.
 if (fs.existsSync(DIST_DIR)) {
   app.use('/static-assets', express.static(path.join(DIST_DIR, 'static-assets'), {
@@ -2921,7 +3011,38 @@ if (fs.existsSync(DIST_DIR)) {
 }
 
 // Listen to port
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(pool ? 'Database: PostgreSQL' : `Database file: ${DB_FILE}`);
 });
+
+let shuttingDown = false;
+async function gracefulShutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`${signal} received; stopping HTTP and database connections...`);
+
+  for (const client of sseClients.values()) client.res.end();
+  sseClients.clear();
+
+  const forceExit = setTimeout(() => {
+    console.error('Graceful shutdown timed out.');
+    process.exit(1);
+  }, 10000);
+  forceExit.unref();
+
+  server.close(async closeError => {
+    try {
+      await writeQueue;
+      if (pool) await pool.end();
+      clearTimeout(forceExit);
+      process.exit(closeError ? 1 : 0);
+    } catch (err) {
+      console.error('Graceful shutdown failed:', err);
+      process.exit(1);
+    }
+  });
+}
+
+process.once('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.once('SIGINT', () => gracefulShutdown('SIGINT'));
