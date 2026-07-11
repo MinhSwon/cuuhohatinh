@@ -156,7 +156,7 @@ export default function RegisterPage() {
     }}>
       <div style={{ width: '100%', maxWidth: 520 }}>
         <div style={{ textAlign: 'center', marginBottom: '1.75rem' }}>
-          <img src="/logo.svg" alt="Cổng thông tin cứu hộ ngập lụt" className="login-brand-logo mobile" />
+          <img src="/logo.png" alt="Cổng thông tin cứu hộ ngập lụt" className="login-brand-logo mobile" />
           <h1 style={{ fontFamily: "'Lora', serif", color: '#2a2520', fontSize: '1.45rem', fontWeight: 600, letterSpacing: '-0.01em' }}>CỨU HỘ NGẬP LỤT</h1>
           <p style={{ color: '#9e9282', fontSize: '0.78rem', marginTop: 4 }}>CỔNG ĐĂNG KÝ NHẬN CẢNH BÁO LŨ & HỖ TRỢ</p>
         </div>

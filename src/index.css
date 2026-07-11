@@ -143,7 +143,7 @@ body {
   height: 72px;
   object-fit: contain;
   flex-shrink: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
   background: #fff;
 }
 
@@ -157,7 +157,7 @@ body {
   height: auto;
   display: block;
   margin: 0 auto 1.5rem;
-  border-radius: var(--radius-md);
+  border-radius: 18px;
   background: #fff;
 }
 

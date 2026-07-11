@@ -112,7 +112,7 @@ function LogoutRow({ onClick }) {
 function BrandMark() {
   return (
     <img
-      src="/logo.svg"
+      src="/logo.png"
       alt="Cổng thông tin cứu hộ ngập lụt"
       className="brand-logo-image compact"
     />

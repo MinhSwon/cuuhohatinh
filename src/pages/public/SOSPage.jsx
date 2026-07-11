@@ -215,7 +215,7 @@ export default function SOSPage() {
       {/* Header */}
       <div style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative', zIndex: 10 }}>
         <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', textDecoration: 'none' }}>
-          <img src="/logo.svg" alt="Cổng thông tin cứu hộ ngập lụt" className="brand-logo-image compact" />
+          <img src="/logo.png" alt="Cổng thông tin cứu hộ ngập lụt" className="brand-logo-image compact" />
           <span style={{ color: '#94a3b8', fontSize: '0.78rem', fontWeight: 600 }}>CỨU HỘ NGẬP LỤT</span>
         </Link>
         <Link to="/login" style={{ color: '#64748b', fontSize: '0.75rem', textDecoration: 'none' }}>Đăng nhập</Link>

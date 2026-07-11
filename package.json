@@ -17,7 +17,7 @@
     "db:reset-local": "node scripts/reset-prisma-database.js && npm run db:deploy && npm run db:generate && npm run db:seed",
     "loadtest:register": "node scripts/loadtest-register.mjs",
     "loadtest:actions": "node scripts/loadtest-user-actions.mjs",
-    "test": "node --test",
+    "test": "node --test tests/*.test.js",
     "test:unit": "node --test tests/*.test.js",
     "check": "npm run lint && npm run test && npm run build",
     "lint": "eslint .",

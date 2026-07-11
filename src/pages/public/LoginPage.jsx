@@ -53,7 +53,7 @@ export default function LoginPage() {
         }} />
 
         <div style={{ position: 'relative', zIndex: 1, textAlign: 'center', maxWidth: 320 }}>
-          <img src="/logo.svg" alt="Cổng thông tin cứu hộ ngập lụt" className="login-brand-logo" />
+          <img src="/logo.png" alt="Cổng thông tin cứu hộ ngập lụt" className="login-brand-logo" />
           <h1 style={{ fontFamily: "'Lora', serif", color: '#f0ece5', fontSize: '1.6rem', fontWeight: 600, letterSpacing: '-0.01em', marginBottom: '0.625rem' }}>
             CỨU HỘ NGẬP LỤT
           </h1>
@@ -82,7 +82,7 @@ export default function LoginPage() {
         <div style={{ width: '100%', maxWidth: 380 }}>
           {/* Mobile logo */}
           <div style={{ textAlign: 'center', marginBottom: '2rem', display: 'none' }} className="show-mobile">
-            <img src="/logo.svg" alt="Cổng thông tin cứu hộ ngập lụt" className="login-brand-logo mobile" />
+            <img src="/logo.png" alt="Cổng thông tin cứu hộ ngập lụt" className="login-brand-logo mobile" />
             <h1 style={{ fontFamily: "'Lora', serif", fontSize: '1.25rem', color: '#2a2520', fontWeight: 600 }}>CỨU HỘ NGẬP LỤT</h1>
           </div>
 
