@@ -9,6 +9,7 @@ import L from 'leaflet';
 import { CheckCircle, X, Navigation } from 'lucide-react';
 import { HA_TINH_MAP_BOUNDS, HA_TINH_MAP_CENTER, getHaTinhMapCenter, hasValidLatLng, isInHaTinhBounds } from '../../utils/haTinhMap';
 import OfflineStatusBanner from '../../components/common/OfflineStatusBanner';
+import { findUserRescueTeam } from '../../server/missionPolicy';
 
 const victimIcon = L.divIcon({
   className: '',
@@ -53,13 +54,8 @@ export default function MissionDetail() {
   const watchIdRef = useRef(null);
   const lastQueuedGpsRef = useRef(0);
 
-  const myTeam = rescueTeams.find(t =>
-    t.leader_user_id === currentUser?.id
-    || t.leader_id === currentUser?.id
-    || t.user_id === currentUser?.id
-    || (Array.isArray(t.member_user_ids) && t.member_user_ids.includes(currentUser?.id))
-    || currentUser?.team_id === t.id
-  );
+  const myTeam = findUserRescueTeam(rescueTeams, currentUser)
+    || rescueTeams.find(team => currentUser?.team_id === team.id);
   const missions = rescueMissions.filter(m => m.rescue_team_id === myTeam?.id && !['CANCELLED', 'UNREACHABLE'].includes(m.status));
   const activeMissions = missions.filter(m => !['RESCUED', 'TRANSFERRED_SAFEZONE'].includes(m.status));
   const selectedMission = missions.find(m => m.id === selectedMissionId) || activeMissions[0];

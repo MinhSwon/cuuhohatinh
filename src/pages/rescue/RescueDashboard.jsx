@@ -5,19 +5,15 @@ import { haversineDistance, formatDistance } from '../../utils/haversine';
 import { Link } from 'react-router-dom';
 import { Activity, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
 import { useToast } from '../../contexts/ToastContext';
+import { findUserRescueTeam } from '../../server/missionPolicy';
 
 export default function RescueDashboard() {
   const { currentUser } = useAuth();
   const { rescueMissions, rescueTeams, floodWarnings, updateOwnTeamStatus } = useData();
   const toast = useToast();
 
-  const myTeam = rescueTeams.find(t =>
-    t.leader_user_id === currentUser?.id ||
-    t.leader_id === currentUser?.id ||
-    t.user_id === currentUser?.id ||
-    (Array.isArray(t.member_user_ids) && t.member_user_ids.includes(currentUser?.id)) ||
-    currentUser?.team_id === t.id
-  );
+  const myTeam = findUserRescueTeam(rescueTeams, currentUser)
+    || rescueTeams.find(team => currentUser?.team_id === team.id);
 
   const myMissions = rescueMissions.filter(m => m.rescue_team_id === myTeam?.id);
   const activeMissions = myMissions.filter(m => !['RESCUED', 'TRANSFERRED_SAFEZONE', 'CANCELLED', 'UNREACHABLE'].includes(m.status));
@@ -31,7 +27,7 @@ export default function RescueDashboard() {
       await updateOwnTeamStatus(myTeam.id, nextStatus);
       toast.success(nextStatus === 'AVAILABLE' ? 'Đội đã chuyển sang Sẵn sàng' : 'Đội đã chuyển sang Bận');
     } catch (err) {
-      toast.error(err.response?.data?.error === 'Team still has active missions'
+      toast.error(err.response?.data?.code === 'TEAM_HAS_ACTIVE_MISSIONS'
         ? 'Không thể chuyển sang Sẵn sàng khi đội còn nhiệm vụ đang xử lý.'
         : 'Không thể cập nhật trạng thái đội.');
     }

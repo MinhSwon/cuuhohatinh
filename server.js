@@ -180,7 +180,7 @@ const authLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   skipSuccessfulRequests: true,
-  message: { success: false, message: 'Qua nhieu lan thu, vui long thu lai sau' },
+  message: { success: false, message: 'Quá nhiều lần thử, vui lòng thử lại sau.' },
 });
 const publicWriteLimiter = rateLimit({
   windowMs: 10 * 60 * 1000,
@@ -465,7 +465,7 @@ function normalizeRescueRequestInput(rawData, user) {
     ? data.requester_type
     : 'SELF';
 
-  const victimName = data.victim_name || data.full_name || 'Nguoi can cuu ho';
+  const victimName = data.victim_name || data.full_name || 'Người cần cứu hộ';
   const victimPhone = data.victim_phone || data.phone || '';
   const victimAreaId = data.victim_area_id || data.area_id || '';
   const victimAreaName = data.victim_area_name || data.area_name || '';
@@ -547,7 +547,7 @@ function enrichRescueRequestCoordination(data) {
     nearby_active_mission_id: nearby?.mission?.id || null,
     nearby_active_team_name: nearby?.mission?.team_name || null,
     coordination_note: nearby
-      ? `Gan nhiem vu ${nearby.mission.id} cua ${nearby.mission.team_name} (${nearby.distance_meters}m). Nen gom cum hoac dieu doi ho tro.`
+      ? `Gần nhiệm vụ ${nearby.mission.id} của ${nearby.mission.team_name} (${nearby.distance_meters}m). Nên gom cụm hoặc điều đội hỗ trợ.`
       : '',
   };
 }
@@ -629,14 +629,14 @@ function getAssignmentWarnings(request, team) {
   if (request?.nearby_active_mission_id) {
     warnings.push({
       type: 'NEARBY_ACTIVE_MISSION',
-      message: `Khu vuc nay da co doi ${request.nearby_active_team_name || 'khac'} dang den. Nen xac minh de tranh nhieu doi cung den mot diem.`,
+      message: `Khu vực này đã có đội ${request.nearby_active_team_name || 'khác'} đang đến. Nên xác minh để tránh nhiều đội cùng đến một điểm.`,
     });
   }
 
   if (!getLatLng(request)) {
     warnings.push({
       type: 'NEEDS_LOCATION_VERIFICATION',
-      message: 'Yeu cau chua co toa do GPS cua nguoi can cuu. Can goi xac minh truoc khi dieu phoi.',
+      message: 'Yêu cầu chưa có tọa độ GPS của người cần cứu. Cần gọi xác minh trước khi điều phối.',
     });
   }
 
@@ -646,13 +646,13 @@ function getAssignmentWarnings(request, team) {
     if (activeCount >= maxActive) {
       warnings.push({
         type: 'TEAM_OVER_CAPACITY',
-        message: `${team.team_name || team.name || 'Doi cuu ho'} da dat tai ${activeCount}/${maxActive} nhiem vu dang xu ly.`,
+        message: `${team.team_name || team.name || 'Đội cứu hộ'} đã đạt tải ${activeCount}/${maxActive} nhiệm vụ đang xử lý.`,
       });
     }
     if (['OFFLINE', 'MAINTENANCE'].includes(team.status)) {
       warnings.push({
         type: 'TEAM_UNAVAILABLE',
-        message: `${team.team_name || team.name || 'Doi cuu ho'} dang o trang thai ${team.status}.`,
+        message: `${team.team_name || team.name || 'Đội cứu hộ'} đang ở trạng thái ${team.status}.`,
       });
     }
   }
@@ -681,7 +681,7 @@ const rescueRequestLimiter = rateLimit({
   },
   message: {
     success: false,
-    message: 'So dien thoai nay gui qua nhieu yeu cau cuu ho. Vui long goi truc tiep doi dieu phoi neu la tinh huong khan cap.',
+    message: 'Số điện thoại này gửi quá nhiều yêu cầu cứu hộ. Vui lòng gọi trực tiếp đội điều phối nếu là tình huống khẩn cấp.',
   },
 });
 
@@ -817,7 +817,7 @@ async function sendEsmsSms({ phone, content, requestId, relatedWarningId, relate
       request_id: shortRequestId,
       related_warning_id: relatedWarningId,
       related_request_id: relatedRequestId,
-      error: 'Missing receiver phone',
+      error: 'Thiếu số điện thoại người nhận.',
     });
   }
 
@@ -832,7 +832,7 @@ async function sendEsmsSms({ phone, content, requestId, relatedWarningId, relate
       request_id: shortRequestId,
       related_warning_id: relatedWarningId,
       related_request_id: relatedRequestId,
-      error: 'eSMS is not configured. Set ESMS_API_KEY, ESMS_SECRET_KEY, ESMS_BRANDNAME.',
+      error: 'eSMS chưa được cấu hình. Hãy thiết lập ESMS_API_KEY, ESMS_SECRET_KEY và ESMS_BRANDNAME.',
     });
   }
 
@@ -1026,11 +1026,11 @@ function fireAndForgetNotification(task, label) {
 }
 
 async function notifyRescueRequestCreated(request) {
-  const area = request.victim_area_name || request.area_name || 'chua xac dinh';
+  const area = request.victim_area_name || request.area_name || 'chưa xác định';
   const peopleCount = request.number_of_people || 1;
   const level = request.emergency_level || 'HIGH';
-  const victimName = request.victim_name || request.full_name || 'Nguoi can cuu ho';
-  const smsContent = `FLOODGUARD SOS: ${victimName} can cuu ho tai ${area}. So nguoi: ${peopleCount}. Muc do: ${level}.`;
+  const victimName = request.victim_name || request.full_name || 'Người cần cứu hộ';
+  const smsContent = `FLOODGUARD SOS: ${victimName} cần cứu hộ tại ${area}. Số người: ${peopleCount}. Mức độ: ${level}.`;
 
   for (const phone of RESCUE_COORDINATOR_PHONES) {
     await sendEsmsSms({
@@ -1038,7 +1038,7 @@ async function notifyRescueRequestCreated(request) {
       content: smsContent,
       requestId: `${request.id}-coordinator-${normalizeVietnamPhone(phone)}`,
       relatedRequestId: request.id,
-      recipient: 'Dieu phoi cuu ho',
+      recipient: 'Điều phối cứu hộ',
     });
   }
 
@@ -1048,7 +1048,7 @@ async function notifyRescueRequestCreated(request) {
       phone: reporterPhone,
       templateId: ZALO_ZNS_TEMPLATE_SOS,
       params: [area, peopleCount, level],
-      smsContent: `FLOODGUARD: Yeu cau cuu ho cua ban da duoc tiep nhan tai ${area}. Hay giu dien thoai de doi lien he.`,
+      smsContent: `FLOODGUARD: Yêu cầu cứu hộ của bạn đã được tiếp nhận tại ${area}. Hãy giữ liên lạc để đội cứu hộ có thể trao đổi khi cần.`,
       requestId: `${request.id}-reporter-confirm`,
       relatedRequestId: request.id,
       recipient: request.reporter_name || victimName,
@@ -1061,12 +1061,12 @@ async function notifyRescueAssigned(request, teamName) {
   if (!phone) return;
 
   const victimName = request.victim_name || request.full_name || 'nguoi can cuu';
-  const area = request.victim_area_name || request.area_name || 'khu vuc cua ban';
+  const area = request.victim_area_name || request.area_name || 'khu vực của bạn';
   await sendEsmsZaloThenSms({
     phone,
     templateId: ZALO_ZNS_TEMPLATE_ASSIGNED,
     params: [victimName, teamName, area],
-    smsContent: `FLOODGUARD: Doi ${teamName} da nhan cuu ho cho ${victimName} tai ${area}. Hay giu dien thoai va ra tin hieu khi thay doi.`,
+    smsContent: `FLOODGUARD: Đội ${teamName} đã nhận cứu hộ cho ${victimName} tại ${area}. Hãy giữ liên lạc và ra tín hiệu khi thấy đội.`,
     requestId: `${request.id}-assigned`,
     relatedRequestId: request.id,
     recipient: request.reporter_name || victimName,
@@ -1141,7 +1141,7 @@ function sanitizeDbForUser(user) {
 
   if (RESCUE_ROLES.includes(user.role)) {
     const teams = Array.isArray(db.rescueTeams) ? db.rescueTeams : [];
-    const visibleTeamIds = getUserTeamIds(teams, user.id);
+    const visibleTeamIds = getUserTeamIds(teams, user);
 
     const missions = Array.isArray(db.rescueMissions)
       ? db.rescueMissions.filter(m => visibleTeamIds.has(m.rescue_team_id))
@@ -1312,6 +1312,18 @@ function backfillSeedDamageReportNumbers() {
   }
 }
 
+function backfillSeedTeamAccountLinks() {
+  if (!Array.isArray(db.rescueTeams)) return;
+  const seedById = new Map(RESCUE_TEAMS.map(team => [team.id, team]));
+  for (const team of db.rescueTeams) {
+    const seed = seedById.get(team.id);
+    if (!seed?.leader_id) continue;
+    if (!team.leader_id) team.leader_id = seed.leader_id;
+    if (!team.leader_user_id) team.leader_user_id = seed.leader_id;
+    if (!team.leader_name) team.leader_name = seed.leader_name;
+  }
+}
+
 function issueToken(user) {
   return jwt.sign(
     {
@@ -1435,7 +1447,7 @@ function broadcastDbUpdate(reason, changedCollections = []) {
 function requireAuth(req, res, next) {
   authenticateOptional(req, res, () => {
     if (req.user) return next();
-    return res.status(401).json({ error: 'Authentication required' });
+    return res.status(401).json({ error: 'Vui lòng đăng nhập để tiếp tục.' });
   });
 }
 
@@ -1443,7 +1455,7 @@ function requireRoles(roles) {
   return (req, res, next) => {
     requireAuth(req, res, () => {
       if (roles.includes(req.user.role)) return next();
-      return res.status(403).json({ error: 'Permission denied' });
+      return res.status(403).json({ error: 'Bạn không có quyền thực hiện thao tác này.' });
     });
   };
 }
@@ -1838,6 +1850,7 @@ if (!usingPostgres && fs.existsSync(DB_FILE)) {
 applySeedPasswords({ overwriteConfiguredSeedUsers: true });
 hardenLegacyPasswords();
 backfillSeedDamageReportNumbers();
+backfillSeedTeamAccountLinks();
 
 if (usingPostgres) {
   await syncRelationalTablesFromState();
@@ -1895,7 +1908,7 @@ app.get('/api/auth/session', requireAuth, async (req, res) => {
       user = userRowToApi(userResult.rows[0]);
       if (!user || user.status !== 'ACTIVE') {
         clearAuthCookie(res);
-        return res.status(401).json({ error: 'Session is no longer active' });
+        return res.status(401).json({ error: 'Phiên đăng nhập không còn hiệu lực.' });
       }
       const profileResult = await pool.query('SELECT * FROM citizen_profiles WHERE user_id = $1 LIMIT 1', [user.id]);
       profile = citizenProfileRowToApi(profileResult.rows[0]);
@@ -1907,7 +1920,7 @@ app.get('/api/auth/session', requireAuth, async (req, res) => {
     return res.json({ success: true, user: safeUser(user), profile });
   } catch (err) {
     console.error('Session validation failed:', err);
-    return res.status(503).json({ error: 'Session validation unavailable' });
+    return res.status(503).json({ error: 'Tạm thời không thể xác thực phiên đăng nhập.' });
   }
 });
 
@@ -1940,7 +1953,7 @@ app.get('/api/public/overview', (req, res) => {
 // 1. GET AUTHENTICATED DATABASE STATE (Sync on page load)
 app.get('/api/db', requireAuth, async (req, res) => {
   if (req.authError) {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+    return res.status(401).json({ error: 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn.' });
   }
 
   try {
@@ -1950,7 +1963,7 @@ app.get('/api/db', requireAuth, async (req, res) => {
     return res.json(data);
   } catch (err) {
     console.error('Database state route failed:', err);
-    return res.status(500).json({ error: 'Database state unavailable' });
+    return res.status(500).json({ error: 'Không thể tải dữ liệu hệ thống.' });
   }
 });
 
@@ -2010,7 +2023,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     if (!credential || !plainPassword) {
       return res.status(400).json({
         success: false,
-        message: 'Vui long nhap email/so dien thoai va mat khau'
+        message: 'Vui lòng nhập email/số điện thoại và mật khẩu.'
       });
     }
 
@@ -2032,7 +2045,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
         console.error('Login failed: users collection is empty or invalid');
         return res.status(503).json({
           success: false,
-          message: 'Du lieu nguoi dung chua san sang, vui long thu lai'
+          message: 'Dữ liệu người dùng chưa sẵn sàng, vui lòng thử lại.'
         });
       }
 
@@ -2046,7 +2059,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     if (!user || user.status !== 'ACTIVE' || !(await verifyPassword(user, plainPassword))) {
       return res.status(401).json({
         success: false,
-        message: 'Sai tai khoan hoac mat khau'
+        message: 'Sai tài khoản hoặc mật khẩu.'
       });
     }
 
@@ -2068,7 +2081,7 @@ app.post('/api/auth/login', authLimiter, async (req, res) => {
     console.error('Login route failed:', err);
     return res.status(500).json({
       success: false,
-      message: 'May chu dang loi dang nhap, vui long thu lai'
+      message: 'Máy chủ đang gặp lỗi đăng nhập, vui lòng thử lại.'
     });
   }
 });
@@ -2106,14 +2119,14 @@ app.post('/api/auth/register', publicWriteLimiter, async (req, res) => {
     if (!cleanName || !cleanPhone || !cleanPassword || !normalize(area_id)) {
       return res.status(400).json({
         success: false,
-        message: 'Vui long nhap day du ho ten, so dien thoai, mat khau va khu vuc'
+        message: 'Vui lòng nhập đầy đủ họ tên, số điện thoại, mật khẩu và khu vực.'
       });
     }
 
     if (cleanPassword.length < 6) {
       return res.status(400).json({
         success: false,
-        message: 'Mat khau phai co it nhat 6 ky tu'
+        message: 'Mật khẩu phải có ít nhất 6 ký tự.'
       });
     }
 
@@ -2140,14 +2153,14 @@ app.post('/api/auth/register', publicWriteLimiter, async (req, res) => {
           await client.query('ROLLBACK');
           return res.status(409).json({
             success: false,
-            message: `So dien thoai ${cleanPhone} da duoc dang ky`
+            message: `Số điện thoại ${cleanPhone} đã được đăng ký.`
           });
         }
         if (duplicated?.email && cleanEmail && normalize(duplicated.email).toLowerCase() === cleanEmail) {
           await client.query('ROLLBACK');
           return res.status(409).json({
             success: false,
-            message: `Email ${cleanEmail} da duoc dang ky`
+            message: `Email ${cleanEmail} đã được đăng ký.`
           });
         }
 
@@ -2199,7 +2212,7 @@ app.post('/api/auth/register', publicWriteLimiter, async (req, res) => {
         if (err.code === '23505') {
           return res.status(409).json({
             success: false,
-            message: 'So dien thoai hoac email da duoc dang ky'
+            message: 'Số điện thoại hoặc email đã được đăng ký.'
           });
         }
         throw err;
@@ -2217,14 +2230,14 @@ app.post('/api/auth/register', publicWriteLimiter, async (req, res) => {
     if (duplicatedPhoneUser) {
       return res.status(409).json({
         success: false,
-        message: `So dien thoai ${cleanPhone} da duoc dang ky`
+        message: `Số điện thoại ${cleanPhone} đã được đăng ký.`
       });
     }
 
     if (duplicatedEmailUser) {
       return res.status(409).json({
         success: false,
-        message: `Email ${cleanEmail} da duoc dang ky`
+        message: `Email ${cleanEmail} đã được đăng ký.`
       });
     }
 
@@ -2272,20 +2285,20 @@ app.post('/api/auth/register', publicWriteLimiter, async (req, res) => {
     console.error('Register route failed:', err);
     return res.status(500).json({
       success: false,
-      message: 'May chu dang loi dang ky, vui long thu lai'
+      message: 'Máy chủ đang gặp lỗi đăng ký, vui lòng thử lại.'
     });
   }
 });
 
 app.use('/api/auth/login-legacy', (req, res) => {
-  res.status(410).json({ success: false, message: 'Legacy login endpoint has been disabled' });
+  res.status(410).json({ success: false, message: 'Điểm đăng nhập cũ đã ngừng hoạt động.' });
 });
 
 // 3. SEMANTIC VECTOR SEARCH
 app.get('/api/search', requireRoles([...ADMIN_ROLES, ...RESCUE_ROLES]), (req, res) => {
   const { q, type } = req.query;
   if (!q) {
-    return res.status(400).json({ error: 'Query parameter "q" is required' });
+    return res.status(400).json({ error: 'Vui lòng nhập nội dung cần tìm.' });
   }
 
   let collection;
@@ -2301,7 +2314,7 @@ app.get('/api/search', requireRoles([...ADMIN_ROLES, ...RESCUE_ROLES]), (req, re
     collection = db.safeZones;
     extractTextFn = (item) => `${item.name || ''} ${item.address || ''} ${item.notes || ''}`;
   } else {
-    return res.status(400).json({ error: 'Invalid or missing "type" parameter. Must be "requests", "warnings", or "safezones"' });
+    return res.status(400).json({ error: 'Loại tìm kiếm không hợp lệ. Chỉ hỗ trợ yêu cầu, cảnh báo hoặc điểm sơ tán.' });
   }
 
   const normalizeSearchText = value => String(value || '')
@@ -2345,7 +2358,7 @@ app.post('/api/warnings', requireRoles(ADMIN_ROLES), (req, res) => {
 app.put('/api/warnings/:id', requireRoles(ADMIN_ROLES), (req, res) => {
   const { id } = req.params;
   const idx = db.floodWarnings.findIndex(w => w.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Warning not found' });
+  if (idx === -1) return res.status(404).json({ error: 'Không tìm thấy cảnh báo.' });
 
   const updatedData = { ...db.floodWarnings[idx], ...pickAllowed(req.body, WARNING_FIELDS), updated_at: new Date().toISOString() };
   const textToEmbed = `${updatedData.title || ''} ${updatedData.content || ''} ${updatedData.area_name || ''}`;
@@ -2373,7 +2386,7 @@ app.post('/api/rescue-requests', publicWriteLimiter, rescueRequestLimiter, authe
     );
 
     if (!data.full_name || !data.area_id || !data.address_detail) {
-      return res.status(400).json({ error: 'Missing required rescue request fields' });
+      return res.status(400).json({ error: 'Vui lòng nhập đầy đủ thông tin bắt buộc của yêu cầu cứu hộ.' });
     }
 
     const requestId = createId('rr');
@@ -2484,14 +2497,14 @@ app.post('/api/rescue-requests', publicWriteLimiter, rescueRequestLimiter, authe
     return res.status(201).json(request);
   } catch (err) {
     console.error('Rescue request route failed:', err);
-    return res.status(500).json({ error: 'Failed to create rescue request' });
+    return res.status(500).json({ error: 'Không thể tạo yêu cầu cứu hộ.' });
   }
 });
 
 app.put('/api/rescue-requests/:id', requireRoles([...ADMIN_ROLES, ...RESCUE_ROLES]), (req, res) => {
   const { id } = req.params;
   const idx = db.rescueRequests.findIndex(r => r.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Request not found' });
+  if (idx === -1) return res.status(404).json({ error: 'Không tìm thấy yêu cầu cứu hộ.' });
 
   db.rescueRequests[idx] = { ...db.rescueRequests[idx], ...pickAllowed(req.body, RESCUE_REQUEST_UPDATE_FIELDS) };
   saveDb();
@@ -2506,8 +2519,8 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), async (re
 
   if (assignmentLocks.has(id)) {
     return res.status(409).json({
-      error: 'Request is being assigned',
-      message: 'Yeu cau nay dang duoc phan cong boi mot thao tac khac. Vui long tai lai.',
+      error: 'Yêu cầu đang được phân công.',
+      message: 'Yêu cầu này đang được phân công bởi một thao tác khác. Vui lòng tải lại.',
     });
   }
 
@@ -2515,21 +2528,21 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), async (re
   
   try {
     const reqIdx = db.rescueRequests.findIndex(r => r.id === id);
-    if (reqIdx === -1) return res.status(404).json({ error: 'Request not found' });
+    if (reqIdx === -1) return res.status(404).json({ error: 'Không tìm thấy yêu cầu cứu hộ.' });
 
     const request = db.rescueRequests[reqIdx];
     const existingMission = findActiveMissionByRequestId(id);
     if (existingMission || request.status !== 'PENDING') {
       return res.status(409).json({
-        error: 'Request already assigned',
-        message: 'Yeu cau nay da duoc phan cong hoac khong con o trang thai cho xu ly.',
+        error: 'Yêu cầu đã được phân công.',
+        message: 'Yêu cầu này đã được phân công hoặc không còn ở trạng thái chờ xử lý.',
         request,
         mission: existingMission,
       });
     }
 
     const team = db.rescueTeams.find(t => t.id === teamId);
-    const resolvedTeamName = teamName || team?.team_name || team?.name || 'Doi cuu ho';
+    const resolvedTeamName = teamName || team?.team_name || team?.name || 'Đội cứu hộ';
     const assignmentWarnings = getAssignmentWarnings(request, team);
     const acceptedAt = new Date().toISOString();
 
@@ -2546,13 +2559,13 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), async (re
         );
         if (lockedResult.rowCount === 0) {
           await client.query('ROLLBACK');
-          return res.status(404).json({ error: 'Request not found' });
+          return res.status(404).json({ error: 'Không tìm thấy yêu cầu cứu hộ.' });
         }
         if (lockedResult.rows[0].status !== 'PENDING') {
           await client.query('ROLLBACK');
           return res.status(409).json({
-            error: 'Request already assigned',
-            message: 'Yeu cau nay da duoc phan cong trong database. Vui long tai lai.',
+            error: 'Yêu cầu đã được phân công.',
+            message: 'Yêu cầu này đã được phân công trong cơ sở dữ liệu. Vui lòng tải lại.',
             request,
             mission: existingMission,
           });
@@ -2635,9 +2648,9 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), async (re
     note: `Phân công ${teamName}`,
     created_at: new Date().toISOString()
   };
-    log.user_name = currentUser?.full_name || 'He thong';
-    log.action = 'Phan cong doi cuu ho';
-    log.note = `Phan cong ${resolvedTeamName}${assignmentWarnings.length ? ` - ${assignmentWarnings.length} canh bao dieu phoi` : ''}`;
+    log.user_name = currentUser?.full_name || 'Hệ thống';
+    log.action = 'Phân công đội cứu hộ';
+    log.note = `Phân công ${resolvedTeamName}${assignmentWarnings.length ? ` - ${assignmentWarnings.length} cảnh báo điều phối` : ''}`;
     db.activityLogs.unshift(log);
 
   // In-app notification is the primary delivery channel for the assigned team.
@@ -2660,8 +2673,8 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), async (re
       db.notifications.unshift({
         id: createId('notif'),
         user_id: request.user_id || request.created_by_user_id,
-        title: 'Da co doi dang den',
-        message: `${resolvedTeamName} da nhan yeu cau cuu ho. Hay giu dien thoai de doi lien he.`,
+        title: 'Đã có đội cứu hộ đang đến',
+        message: `${resolvedTeamName} đã nhận yêu cầu cứu hộ. Hãy giữ liên lạc để đội có thể trao đổi khi cần.`,
         type: 'RESCUE_REQUEST_ASSIGNED',
         is_read: false,
         created_at: new Date().toISOString(),
@@ -2677,7 +2690,7 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), async (re
     res.json({ success: true, request, mission, assignment_warnings: assignmentWarnings, rescueTeams: db.rescueTeams });
   } catch (err) {
     console.error('Failed to assign rescue request:', err);
-    res.status(500).json({ error: 'Failed to assign rescue request' });
+    res.status(500).json({ error: 'Không thể phân công đội cứu hộ.' });
   } finally {
     assignmentLocks.delete(id);
   }
@@ -2690,26 +2703,26 @@ app.post('/api/missions/:id/status', requireRoles([...ADMIN_ROLES, ...RESCUE_ROL
   const changedByUser = req.user;
 
   const missionIdx = db.rescueMissions.findIndex(m => m.id === id);
-  if (missionIdx === -1) return res.status(404).json({ error: 'Mission not found' });
+  if (missionIdx === -1) return res.status(404).json({ error: 'Không tìm thấy nhiệm vụ cứu hộ.' });
 
   const mission = db.rescueMissions[missionIdx];
   const oldStatus = mission.status;
 
   if (!isValidMissionStatus(newStatus)) {
-    return res.status(400).json({ error: 'Invalid mission status' });
+    return res.status(400).json({ error: 'Trạng thái nhiệm vụ không hợp lệ.' });
   }
 
   if (!canTransitionMission(oldStatus, newStatus)) {
     return res.status(409).json({
-      error: 'Invalid mission status transition',
+      error: 'Không thể chuyển nhiệm vụ giữa hai trạng thái này.',
       oldStatus,
       newStatus,
     });
   }
 
   if (RESCUE_ROLES.includes(req.user.role)
-    && !canUserAccessMission(db.rescueTeams, req.user.id, mission)) {
-    return res.status(403).json({ error: 'Mission is not assigned to your rescue team' });
+    && !canUserAccessMission(db.rescueTeams, req.user, mission)) {
+    return res.status(403).json({ error: 'Nhiệm vụ này không được phân công cho đội của bạn.' });
   }
 
   // Update mission
@@ -2806,7 +2819,7 @@ app.post('/api/teams', requireRoles(ADMIN_ROLES), (req, res) => {
 app.put('/api/teams/:id', requireRoles(ADMIN_ROLES), (req, res) => {
   const { id } = req.params;
   const idx = db.rescueTeams.findIndex(t => t.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Team not found' });
+  if (idx === -1) return res.status(404).json({ error: 'Không tìm thấy đội cứu hộ.' });
 
   db.rescueTeams[idx] = { ...db.rescueTeams[idx], ...pickAllowed(req.body, TEAM_FIELDS) };
   saveDb();
@@ -2817,20 +2830,21 @@ app.patch('/api/teams/:id/status', requireRoles([...ADMIN_ROLES, ...RESCUE_ROLES
   const { id } = req.params;
   const { status } = pickAllowed(req.body, ['status']);
   const idx = db.rescueTeams.findIndex(team => team.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Team not found' });
+  if (idx === -1) return res.status(404).json({ error: 'Không tìm thấy đội cứu hộ.' });
   if (!['AVAILABLE', 'BUSY', 'OFFLINE'].includes(status)) {
-    return res.status(400).json({ error: 'Invalid team status' });
+    return res.status(400).json({ error: 'Trạng thái đội cứu hộ không hợp lệ.' });
   }
 
   const team = db.rescueTeams[idx];
-  if (RESCUE_ROLES.includes(req.user.role) && !getUserTeamIds(db.rescueTeams, req.user.id).has(id)) {
-    return res.status(403).json({ error: 'You can update only your own rescue team' });
+  if (RESCUE_ROLES.includes(req.user.role) && !getUserTeamIds(db.rescueTeams, req.user).has(id)) {
+    return res.status(403).json({ error: 'Bạn chỉ có thể cập nhật trạng thái đội cứu hộ của mình.' });
   }
 
   const activeCount = getTeamActiveMissionCount(id);
   if (status === 'AVAILABLE' && activeCount > 0) {
     return res.status(409).json({
-      error: 'Team still has active missions',
+      error: 'Đội vẫn còn nhiệm vụ đang xử lý.',
+      code: 'TEAM_HAS_ACTIVE_MISSIONS',
       activeMissionCount: activeCount,
     });
   }
@@ -2871,7 +2885,7 @@ app.post('/api/safe-zones', requireRoles(ADMIN_ROLES), (req, res) => {
 app.put('/api/safe-zones/:id', requireRoles(ADMIN_ROLES), (req, res) => {
   const { id } = req.params;
   const idx = db.safeZones.findIndex(s => s.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Safe zone not found' });
+  if (idx === -1) return res.status(404).json({ error: 'Không tìm thấy điểm sơ tán.' });
 
   const updated = { ...db.safeZones[idx], ...pickAllowed(req.body, SAFE_ZONE_FIELDS) };
   const textToEmbed = `${updated.name || ''} ${updated.address || ''} ${updated.notes || ''}`;
@@ -2904,7 +2918,7 @@ app.post('/api/routes', requireRoles(ADMIN_ROLES), (req, res) => {
 app.put('/api/routes/:id', requireRoles(ADMIN_ROLES), (req, res) => {
   const { id } = req.params;
   const idx = db.rescueRoutes.findIndex(r => r.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Route not found' });
+  if (idx === -1) return res.status(404).json({ error: 'Không tìm thấy tuyến đường cứu hộ.' });
 
   db.rescueRoutes[idx] = { ...db.rescueRoutes[idx], ...pickAllowed(req.body, ROUTE_FIELDS) };
   saveDb();
@@ -2925,10 +2939,19 @@ app.post('/api/damage-reports', requireRoles(ADMIN_ROLES), (req, res) => {
     'house_collapsed', 'house_flooded', 'crop_flooded_ha', 'casualties_deceased',
     'casualties_missing', 'casualties_injured', 'estimated_loss_billion',
   ];
+  const numericLabels = {
+    house_collapsed: 'Số nhà sập',
+    house_flooded: 'Số nhà bị ngập',
+    crop_flooded_ha: 'Diện tích hoa màu bị ngập',
+    casualties_deceased: 'Số người tử vong',
+    casualties_missing: 'Số người mất tích',
+    casualties_injured: 'Số người bị thương',
+    estimated_loss_billion: 'Giá trị thiệt hại ước tính',
+  };
   for (const field of nonNegativeFields) {
     const value = Number(data[field] || 0);
     if (!Number.isFinite(value) || value < 0) {
-      return res.status(400).json({ error: `${field} must be a non-negative number` });
+      return res.status(400).json({ error: `${numericLabels[field]} phải là số không âm.` });
     }
     data[field] = value;
   }
@@ -2957,7 +2980,7 @@ app.post('/api/vulnerable-households', requireRoles(ADMIN_ROLES), (req, res) => 
 app.put('/api/vulnerable-households/:id', requireRoles(ADMIN_ROLES), (req, res) => {
   const { id } = req.params;
   const idx = db.vulnerableHouseholds.findIndex(v => v.id === id);
-  if (idx === -1) return res.status(404).json({ error: 'Vulnerable household not found' });
+  if (idx === -1) return res.status(404).json({ error: 'Không tìm thấy hộ dễ tổn thương.' });
 
   db.vulnerableHouseholds[idx] = { ...db.vulnerableHouseholds[idx], ...pickAllowed(req.body, VULNERABLE_HOUSEHOLD_FIELDS) };
   saveDb();
@@ -2981,10 +3004,10 @@ app.get('/api/notifications/provider-status', requireRoles(ADMIN_ROLES), (req, r
 app.post('/api/sms/send', requireRoles(ADMIN_ROLES), async (req, res) => {
   const data = sanitizeObject(req.body || {});
   const message = String(data.message || data.content || '').trim();
-  if (!message) return res.status(400).json({ error: 'Message is required' });
+  if (!message) return res.status(400).json({ error: 'Vui lòng nhập nội dung tin nhắn.' });
   if (!hasEsmsSmsConfig()) {
     return res.status(503).json({
-      error: 'eSMS is not configured',
+      error: 'eSMS chưa được cấu hình.',
       required_env: ['ESMS_API_KEY', 'ESMS_SECRET_KEY', 'ESMS_BRANDNAME'],
       missing_env: getEsmsMissingConfig(),
     });
@@ -2998,7 +3021,7 @@ app.post('/api/sms/send', requireRoles(ADMIN_ROLES), async (req, res) => {
     : collectNotificationRecipients({ target: data.target || 'all', area_id: data.area_id || '' });
 
   if (recipients.length === 0) {
-    return res.status(400).json({ error: 'No valid recipients found' });
+    return res.status(400).json({ error: 'Không tìm thấy người nhận có số điện thoại hợp lệ.' });
   }
 
   const logs = await sendBulkSms({
@@ -3027,7 +3050,7 @@ app.post('/api/sms/send', requireRoles(ADMIN_ROLES), async (req, res) => {
 
 app.post('/api/notifications/esms-callback', (req, res) => {
   if (ESMS_CALLBACK_TOKEN && req.query.token !== ESMS_CALLBACK_TOKEN) {
-    return res.status(401).json({ error: 'Invalid callback token' });
+    return res.status(401).json({ error: 'Mã xác thực callback không hợp lệ.' });
   }
 
   const payload = sanitizeObject(req.body || {});
@@ -3048,7 +3071,7 @@ app.post('/api/notifications/esms-callback', (req, res) => {
     addSmsLog({
       phone: payload.Phone || payload.phone || '',
       recipient: payload.Receiver || '',
-      message: 'Provider callback without local request log',
+      message: 'Nhà cung cấp gửi callback nhưng không tìm thấy nhật ký yêu cầu tương ứng.',
       status,
       provider: 'eSMS',
       channel: 'callback',
@@ -3080,7 +3103,7 @@ app.put('/api/notifications/:id/read', requireAuth, (req, res) => {
   if (idx !== -1) {
     const notification = db.notifications[idx];
     if (notification.user_id && notification.user_id !== req.user.id && !ADMIN_ROLES.includes(req.user.role)) {
-      return res.status(403).json({ error: 'Permission denied' });
+      return res.status(403).json({ error: 'Bạn không có quyền thực hiện thao tác này.' });
     }
     db.notifications[idx].is_read = true;
     saveDb();
@@ -3090,17 +3113,17 @@ app.put('/api/notifications/:id/read', requireAuth, (req, res) => {
 });
 
 app.use('/api', (req, res) => {
-  res.status(404).json({ error: 'API endpoint not found' });
+  res.status(404).json({ error: 'Không tìm thấy chức năng API được yêu cầu.' });
 });
 
 app.use((err, req, res, next) => {
   if (err instanceof SyntaxError && err.status === 400 && 'body' in err) {
-    return res.status(400).json({ error: 'Invalid JSON body', requestId: req.requestId });
+    return res.status(400).json({ error: 'Dữ liệu gửi lên không đúng định dạng JSON.', requestId: req.requestId });
   }
 
   console.error(`Unhandled request error [${req.requestId}]:`, err);
   if (res.headersSent) return next(err);
-  return res.status(500).json({ error: 'Internal server error', requestId: req.requestId });
+  return res.status(500).json({ error: 'Máy chủ gặp lỗi nội bộ.', requestId: req.requestId });
 });
 
 // Serve the production React build from the same domain as the API.
@@ -3132,11 +3155,11 @@ if (fs.existsSync(DIST_DIR)) {
   }));
 
   app.use('/assets', (req, res) => {
-    res.status(404).type('text/plain').send('Asset not found');
+    res.status(404).type('text/plain').send('Không tìm thấy tài nguyên.');
   });
 
   app.use('/static-assets', (req, res) => {
-    res.status(404).type('text/plain').send('Static asset not found');
+    res.status(404).type('text/plain').send('Không tìm thấy tài nguyên tĩnh.');
   });
 
   app.get('*', (req, res) => {

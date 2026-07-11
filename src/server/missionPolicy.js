@@ -47,20 +47,49 @@ export function canTransitionMission(oldStatus, newStatus) {
   return oldStatus === newStatus || TRANSITIONS[oldStatus].includes(newStatus);
 }
 
-export function getUserTeamIds(teams, userId) {
-  if (!userId || !Array.isArray(teams)) return new Set();
+function normalizeIdentityText(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function normalizePhone(value) {
+  return String(value || '').replace(/\D/g, '').replace(/^84(?=\d{9}$)/, '0');
+}
+
+export function getUserTeamIds(teams, userOrId) {
+  const user = typeof userOrId === 'object' && userOrId !== null ? userOrId : { id: userOrId };
+  if (!user.id || !Array.isArray(teams)) return new Set();
+
+  const userPhone = normalizePhone(user.phone);
+  const userName = normalizeIdentityText(user.full_name || user.fullName);
 
   return new Set(teams.filter(team => {
     const memberIds = Array.isArray(team.member_user_ids) ? team.member_user_ids : [];
-    return team.leader_user_id === userId
-      || team.leader_id === userId
-      || team.user_id === userId
-      || memberIds.includes(userId);
+    const idMatched = team.leader_user_id === user.id
+      || team.leader_id === user.id
+      || team.user_id === user.id
+      || memberIds.includes(user.id);
+    const legacyIdentityMatched = Boolean(
+      userPhone
+      && userName
+      && normalizePhone(team.phone) === userPhone
+      && normalizeIdentityText(team.leader_name) === userName
+    );
+    return idMatched || legacyIdentityMatched;
   }).map(team => team.id));
 }
 
-export function canUserAccessMission(teams, userId, mission) {
-  return Boolean(mission?.rescue_team_id && getUserTeamIds(teams, userId).has(mission.rescue_team_id));
+export function findUserRescueTeam(teams, user) {
+  const teamIds = getUserTeamIds(teams, user);
+  return Array.isArray(teams) ? teams.find(team => teamIds.has(team.id)) || null : null;
+}
+
+export function canUserAccessMission(teams, user, mission) {
+  return Boolean(mission?.rescue_team_id && getUserTeamIds(teams, user).has(mission.rescue_team_id));
 }
 
 export function sanitizeMissionUpdate(extraData) {
