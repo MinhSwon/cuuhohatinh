@@ -30,6 +30,7 @@ Lệnh này chạy ESLint, kiểm thử chính sách nghiệp vụ và productio
 - Tài khoản cứu hộ chỉ đọc/cập nhật nhiệm vụ thuộc đội của mình. Server kiểm soát luồng chuyển trạng thái và danh sách trường được phép cập nhật.
 - Khi nhận `SIGTERM`/`SIGINT`, server ngừng kết nối HTTP/SSE, chờ hàng đợi ghi dữ liệu và đóng PostgreSQL trước khi thoát.
 - Mỗi phản hồi có `X-Request-Id`; lỗi API trả JSON kèm request ID để đối chiếu log.
+- Thông báo tài khoản realtime là kênh điều phối chính giữa Admin, đội cứu hộ và người dân. SMS điện thoại chỉ là dự phòng và mặc định tắt; chỉ bật bằng `ENABLE_SMS_FALLBACK=true` khi eSMS đã được cấu hình, nạp tiền và kiểm thử.
 
 Chi tiết cấu hình Render/PostgreSQL xem [DEPLOY.md](./DEPLOY.md).
 

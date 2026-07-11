@@ -2,11 +2,11 @@
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { StatusBadge, LevelBadge } from '../../components/common/StatusBadge';
+import { StatusBadge } from '../../components/common/StatusBadge';
 import { haversineDistance, formatDistance } from '../../utils/haversine';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
-import { CheckCircle, X, Phone, MapPin, Navigation, Activity, AlertTriangle, Clock } from 'lucide-react';
+import { CheckCircle, X, Navigation } from 'lucide-react';
 import { HA_TINH_MAP_BOUNDS, HA_TINH_MAP_CENTER, getHaTinhMapCenter, hasValidLatLng, isInHaTinhBounds } from '../../utils/haTinhMap';
 import OfflineStatusBanner from '../../components/common/OfflineStatusBanner';
 
@@ -53,7 +53,13 @@ export default function MissionDetail() {
   const watchIdRef = useRef(null);
   const lastQueuedGpsRef = useRef(0);
 
-  const myTeam = rescueTeams.find(t => t.leader_user_id === currentUser?.id) || rescueTeams[0];
+  const myTeam = rescueTeams.find(t =>
+    t.leader_user_id === currentUser?.id
+    || t.leader_id === currentUser?.id
+    || t.user_id === currentUser?.id
+    || (Array.isArray(t.member_user_ids) && t.member_user_ids.includes(currentUser?.id))
+    || currentUser?.team_id === t.id
+  );
   const missions = rescueMissions.filter(m => m.rescue_team_id === myTeam?.id && !['CANCELLED', 'UNREACHABLE'].includes(m.status));
   const activeMissions = missions.filter(m => !['RESCUED', 'TRANSFERRED_SAFEZONE'].includes(m.status));
   const selectedMission = missions.find(m => m.id === selectedMissionId) || activeMissions[0];

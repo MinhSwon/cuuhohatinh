@@ -35,6 +35,15 @@ export default function DamageReports() {
       toast.error('Vui lòng nhập đầy đủ các thông tin bắt buộc!');
       return;
     }
+    const quantitativeFields = [
+      form.house_collapsed, form.house_flooded, form.crop_flooded_ha,
+      form.casualties_deceased, form.casualties_missing, form.casualties_injured,
+      form.estimated_loss_billion,
+    ];
+    if (!quantitativeFields.some(value => Number(value) > 0)) {
+      toast.error('Vui lòng nhập ít nhất một số liệu thiệt hại lớn hơn 0.');
+      return;
+    }
 
     const area = areas.find(a => a.id === form.area_id);
     createDamageReport({
@@ -239,7 +248,7 @@ export default function DamageReports() {
               {/* Quantitative Metrics Section */}
               <div style={{ background: 'var(--bg-subtle)', padding: '1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-light)' }}>
                 <h4 style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                  <ShieldAlert size={14} color="var(--warning)" /> Số liệu định lượng (nếu có)
+                  <ShieldAlert size={14} color="var(--warning)" /> Số liệu định lượng (bắt buộc ít nhất một giá trị)
                 </h4>
                 
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>

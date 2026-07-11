@@ -157,6 +157,7 @@ const ESMS_BRANDNAME = process.env.ESMS_BRANDNAME || '';
 const ESMS_SANDBOX = process.env.ESMS_SANDBOX ?? (IS_DEPLOYED_RUNTIME ? '0' : '1');
 const ESMS_CALLBACK_URL = process.env.ESMS_CALLBACK_URL || '';
 const ESMS_CALLBACK_TOKEN = process.env.ESMS_CALLBACK_TOKEN || '';
+const ENABLE_SMS_FALLBACK = process.env.ENABLE_SMS_FALLBACK === 'true';
 const ESMS_SMS_ENDPOINT = 'https://rest.esms.vn/MainService.svc/json/SendMultipleMessage_V4_post_json/';
 const ESMS_MULTI_CHANNEL_ENDPOINT = 'https://rest.esms.vn/MainService.svc/json/MultiChannelMessage/';
 const ZALO_OA_ID = process.env.ZALO_OA_ID || '';
@@ -251,6 +252,8 @@ const ROUTE_FIELDS = [
 const DAMAGE_REPORT_FIELDS = [
   'reporter_id', 'reporter_name', 'phone', 'area_id', 'area_name', 'address_detail',
   'damage_type', 'severity', 'description', 'estimated_loss', 'latitude', 'longitude', 'images',
+  'house_collapsed', 'house_flooded', 'crop_flooded_ha', 'casualties_deceased',
+  'casualties_missing', 'casualties_injured', 'estimated_loss_billion',
 ];
 const VULNERABLE_HOUSEHOLD_FIELDS = [
   'full_name', 'head_name', 'phone', 'area_id', 'area_name', 'address_detail',
@@ -585,14 +588,13 @@ function syncTeamLoad(teamId) {
   return team;
 }
 
-function createAdminNotifications(title, message, type, relatedId = null) {
-  const admins = Array.isArray(db.users)
-    ? db.users.filter(user => ADMIN_ROLES.includes(user.role) && user.status !== 'BLOCKED')
-    : [];
+function createUserNotifications(userIds, title, message, type, relatedId = null) {
+  if (!Array.isArray(db.notifications)) db.notifications = [];
+  const uniqueUserIds = [...new Set(userIds.filter(Boolean))];
   const createdAt = new Date().toISOString();
-  const notifications = admins.map(admin => ({
+  const notifications = uniqueUserIds.map(userId => ({
     id: createId('notif'),
-    user_id: admin.id,
+    user_id: userId,
     title,
     message,
     type,
@@ -603,6 +605,23 @@ function createAdminNotifications(title, message, type, relatedId = null) {
 
   db.notifications.unshift(...notifications);
   return notifications;
+}
+
+function createAdminNotifications(title, message, type, relatedId = null) {
+  const admins = Array.isArray(db.users)
+    ? db.users.filter(user => ADMIN_ROLES.includes(user.role) && user.status !== 'BLOCKED')
+    : [];
+  return createUserNotifications(admins.map(admin => admin.id), title, message, type, relatedId);
+}
+
+function getTeamAccountIds(team) {
+  if (!team) return [];
+  return [
+    team.leader_user_id,
+    team.leader_id,
+    team.user_id,
+    ...(Array.isArray(team.member_user_ids) ? team.member_user_ids : []),
+  ].filter(Boolean);
 }
 
 function getAssignmentWarnings(request, team) {
@@ -1275,6 +1294,24 @@ function hardenLegacyPasswords() {
   }
 }
 
+function backfillSeedDamageReportNumbers() {
+  if (!Array.isArray(db.damageReports)) return;
+  const numericFields = [
+    'house_collapsed', 'house_flooded', 'crop_flooded_ha', 'casualties_deceased',
+    'casualties_missing', 'casualties_injured', 'estimated_loss_billion',
+  ];
+  const seedById = new Map(DAMAGE_REPORTS.map(report => [report.id, report]));
+  for (const report of db.damageReports) {
+    const seed = seedById.get(report.id);
+    if (!seed) continue;
+    for (const field of numericFields) {
+      if (report[field] === undefined || report[field] === null) {
+        report[field] = Number(seed[field] || 0);
+      }
+    }
+  }
+}
+
 function issueToken(user) {
   return jwt.sign(
     {
@@ -1800,6 +1837,7 @@ if (!usingPostgres && fs.existsSync(DB_FILE)) {
 // This repairs stale hashes on deploy without touching registered real users.
 applySeedPasswords({ overwriteConfiguredSeedUsers: true });
 hardenLegacyPasswords();
+backfillSeedDamageReportNumbers();
 
 if (usingPostgres) {
   await syncRelationalTablesFromState();
@@ -2266,7 +2304,22 @@ app.get('/api/search', requireRoles([...ADMIN_ROLES, ...RESCUE_ROLES]), (req, re
     return res.status(400).json({ error: 'Invalid or missing "type" parameter. Must be "requests", "warnings", or "safezones"' });
   }
 
-  const results = searchCollection(collection, q, extractTextFn);
+  const normalizeSearchText = value => String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+  const normalizedQuery = normalizeSearchText(q);
+  const exactMatches = collection.filter(item => {
+    const searchable = type === 'requests'
+      ? [item.id, item.full_name, item.phone, item.victim_name, item.victim_phone, item.area_name, item.address_detail, item.victim_address_detail, item.note]
+      : [extractTextFn(item), item.id];
+    return searchable.some(value => normalizeSearchText(value).includes(normalizedQuery));
+  });
+  const results = exactMatches.length > 0
+    ? exactMatches.map(item => ({ ...item, similarity: 1, search_match: 'EXACT' }))
+    : searchCollection(collection, q, extractTextFn).map(item => ({ ...item, search_match: 'SEMANTIC' }));
   res.json(results);
 });
 
@@ -2391,9 +2444,17 @@ app.post('/api/rescue-requests', publicWriteLimiter, rescueRequestLimiter, authe
         vector_embedding: getEmbedding(textToEmbed),
       };
       db.rescueRequests.unshift(request);
+      createAdminNotifications(
+        request.sos_mode ? '🆘 SOS mới cần xử lý' : 'Yêu cầu cứu hộ mới',
+        `${request.full_name} cần hỗ trợ tại ${request.area_name || request.address_detail}.`,
+        'RESCUE_REQUEST',
+        request.id
+      );
       saveDb();
-      broadcastDbUpdate('rescue-request:created', ['rescueRequests']);
-      fireAndForgetNotification(() => notifyRescueRequestCreated(request), 'Rescue request notification');
+      broadcastDbUpdate('rescue-request:created', ['rescueRequests', 'notifications']);
+      if (ENABLE_SMS_FALLBACK) {
+        fireAndForgetNotification(() => notifyRescueRequestCreated(request), 'Rescue request SMS fallback');
+      }
       return res.status(201).json(request);
     }
 
@@ -2409,9 +2470,17 @@ app.post('/api/rescue-requests', publicWriteLimiter, rescueRequestLimiter, authe
       completed_at: null
     };
     db.rescueRequests.unshift(request);
+    createAdminNotifications(
+      request.sos_mode ? '🆘 SOS mới cần xử lý' : 'Yêu cầu cứu hộ mới',
+      `${request.full_name} cần hỗ trợ tại ${request.area_name || request.address_detail}.`,
+      'RESCUE_REQUEST',
+      request.id
+    );
     saveDb();
-    broadcastDbUpdate('rescue-request:created', ['rescueRequests']);
-    fireAndForgetNotification(() => notifyRescueRequestCreated(request), 'Rescue request notification');
+    broadcastDbUpdate('rescue-request:created', ['rescueRequests', 'notifications']);
+    if (ENABLE_SMS_FALLBACK) {
+      fireAndForgetNotification(() => notifyRescueRequestCreated(request), 'Rescue request SMS fallback');
+    }
     return res.status(201).json(request);
   } catch (err) {
     console.error('Rescue request route failed:', err);
@@ -2571,21 +2640,21 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), async (re
     log.note = `Phan cong ${resolvedTeamName}${assignmentWarnings.length ? ` - ${assignmentWarnings.length} canh bao dieu phoi` : ''}`;
     db.activityLogs.unshift(log);
 
-  // Add notification for team
-    const notif = {
-    id: createId('notif'),
-    user_id: 'user-rescue-1', // Default lead
-    title: 'Nhiệm vụ mới!',
-    message: `Bạn được phân công cứu hộ ${request.full_name}`,
-    type: 'MISSION_ASSIGNED',
-    is_read: false,
-    created_at: new Date().toISOString(),
-    related_id: mission.id
-  };
-    notif.user_id = team?.leader_user_id || team?.leader_id || 'user-rescue-1';
-    notif.title = 'Nhiem vu moi!';
-    notif.message = `Ban duoc phan cong cuu ho ${request.victim_name || request.full_name}`;
-    db.notifications.unshift(notif);
+  // In-app notification is the primary delivery channel for the assigned team.
+    const teamAccountIds = getTeamAccountIds(team);
+    createUserNotifications(
+      teamAccountIds,
+      'Nhiệm vụ cứu hộ mới',
+      `Đội ${resolvedTeamName} được phân công cứu hộ ${request.victim_name || request.full_name}.`,
+      'MISSION_ASSIGNED',
+      mission.id
+    );
+    if (teamAccountIds.length === 0) {
+      assignmentWarnings.push({
+        type: 'TEAM_ACCOUNT_NOT_LINKED',
+        message: 'Đội chưa liên kết tài khoản nhận thông báo. Hãy cập nhật trưởng đội trước khi điều phối thực tế.',
+      });
+    }
 
     if (request.user_id || request.created_by_user_id) {
       db.notifications.unshift({
@@ -2602,7 +2671,9 @@ app.post('/api/rescue-requests/:id/assign', requireRoles(ADMIN_ROLES), async (re
 
     saveDb();
     broadcastDbUpdate('rescue-request:assigned', ['rescueRequests', 'rescueMissions', 'rescueTeams', 'activityLogs', 'notifications']);
-    fireAndForgetNotification(() => notifyRescueAssigned(request, resolvedTeamName), 'Rescue assignment notification');
+    if (ENABLE_SMS_FALLBACK) {
+      fireAndForgetNotification(() => notifyRescueAssigned(request, resolvedTeamName), 'Rescue assignment SMS fallback');
+    }
     res.json({ success: true, request, mission, assignment_warnings: assignmentWarnings, rescueTeams: db.rescueTeams });
   } catch (err) {
     console.error('Failed to assign rescue request:', err);
@@ -2663,15 +2734,36 @@ app.post('/api/missions/:id/status', requireRoles([...ADMIN_ROLES, ...RESCUE_ROL
   };
   db.missionStatusLogs.push(logEntry);
 
-  if (newStatus === 'NEED_SUPPORT' || newStatus === 'UNREACHABLE') {
+  if (RESCUE_ROLES.includes(req.user.role) && newStatus !== oldStatus) {
     const updatedMission = db.rescueMissions[missionIdx];
-    const title = newStatus === 'NEED_SUPPORT'
-      ? '🆘 Đội cứu hộ yêu cầu hỗ trợ thêm'
-      : '📵 Đội cứu hộ báo không liên lạc được';
-    const message = newStatus === 'NEED_SUPPORT'
-      ? `Đội ${updatedMission.team_name || mission.team_name || 'cứu hộ'} cần hỗ trợ thêm cho nạn nhân ${updatedMission.victim_name || mission.victim_name || 'chưa rõ'}.`
-      : `Đội ${updatedMission.team_name || mission.team_name || 'cứu hộ'} không liên lạc được với nạn nhân ${updatedMission.victim_name || mission.victim_name || 'chưa rõ'}.`;
+    const teamName = updatedMission.team_name || mission.team_name || 'Đội cứu hộ';
+    const victimName = updatedMission.victim_name || mission.victim_name || 'nạn nhân';
+    const titleByStatus = {
+      ACCEPTED: 'Đội cứu hộ đã nhận nhiệm vụ',
+      MOVING: 'Đội cứu hộ đang di chuyển',
+      NEAR_VICTIM: 'Đội cứu hộ đã đến gần nạn nhân',
+      ARRIVED_CONFIRMED: 'Đội cứu hộ đã tiếp cận nạn nhân',
+      RESCUING: 'Đội cứu hộ đang thực hiện cứu hộ',
+      RESCUED: 'Cứu hộ thành công',
+      TRANSFERRED_SAFEZONE: 'Đã đưa nạn nhân đến nơi an toàn',
+      NEED_SUPPORT: '🆘 Đội cứu hộ yêu cầu hỗ trợ thêm',
+      UNREACHABLE: '📵 Đội cứu hộ báo không liên lạc được',
+      CANCELLED: 'Nhiệm vụ đã bị hủy',
+    };
+    const title = titleByStatus[newStatus] || 'Cập nhật nhiệm vụ cứu hộ';
+    const message = `${teamName} cập nhật nhiệm vụ cứu hộ ${victimName}: ${oldStatus} → ${newStatus}.`;
     createAdminNotifications(title, message, newStatus, id);
+  }
+
+  if (ADMIN_ROLES.includes(req.user.role) && newStatus !== oldStatus) {
+    const assignedTeam = db.rescueTeams.find(team => team.id === mission.rescue_team_id);
+    createUserNotifications(
+      getTeamAccountIds(assignedTeam),
+      'Điều phối viên cập nhật nhiệm vụ',
+      `Nhiệm vụ ${mission.victim_name || id} đã chuyển từ ${oldStatus} sang ${newStatus}.`,
+      'MISSION_STATUS_UPDATED',
+      id
+    );
   }
 
   // Update request status
@@ -2719,6 +2811,39 @@ app.put('/api/teams/:id', requireRoles(ADMIN_ROLES), (req, res) => {
   db.rescueTeams[idx] = { ...db.rescueTeams[idx], ...pickAllowed(req.body, TEAM_FIELDS) };
   saveDb();
   res.json(db.rescueTeams[idx]);
+});
+
+app.patch('/api/teams/:id/status', requireRoles([...ADMIN_ROLES, ...RESCUE_ROLES]), (req, res) => {
+  const { id } = req.params;
+  const { status } = pickAllowed(req.body, ['status']);
+  const idx = db.rescueTeams.findIndex(team => team.id === id);
+  if (idx === -1) return res.status(404).json({ error: 'Team not found' });
+  if (!['AVAILABLE', 'BUSY', 'OFFLINE'].includes(status)) {
+    return res.status(400).json({ error: 'Invalid team status' });
+  }
+
+  const team = db.rescueTeams[idx];
+  if (RESCUE_ROLES.includes(req.user.role) && !getUserTeamIds(db.rescueTeams, req.user.id).has(id)) {
+    return res.status(403).json({ error: 'You can update only your own rescue team' });
+  }
+
+  const activeCount = getTeamActiveMissionCount(id);
+  if (status === 'AVAILABLE' && activeCount > 0) {
+    return res.status(409).json({
+      error: 'Team still has active missions',
+      activeMissionCount: activeCount,
+    });
+  }
+
+  db.rescueTeams[idx] = {
+    ...team,
+    status,
+    status_updated_by: req.user.id,
+    status_updated_at: new Date().toISOString(),
+  };
+  saveDb();
+  broadcastDbUpdate('rescue-team:status-updated', ['rescueTeams']);
+  return res.json(db.rescueTeams[idx]);
 });
 
 app.delete('/api/teams/:id', requireRoles(ADMIN_ROLES), (req, res) => {
@@ -2795,9 +2920,21 @@ app.delete('/api/routes/:id', requireRoles(ADMIN_ROLES), (req, res) => {
 
 // 10. ACTIVITY LOGS, DAMAGE REPORTS, SMS LOGS & VULNERABLE HOUSEHOLDS
 app.post('/api/damage-reports', requireRoles(ADMIN_ROLES), (req, res) => {
+  const data = pickAllowed(req.body, DAMAGE_REPORT_FIELDS);
+  const nonNegativeFields = [
+    'house_collapsed', 'house_flooded', 'crop_flooded_ha', 'casualties_deceased',
+    'casualties_missing', 'casualties_injured', 'estimated_loss_billion',
+  ];
+  for (const field of nonNegativeFields) {
+    const value = Number(data[field] || 0);
+    if (!Number.isFinite(value) || value < 0) {
+      return res.status(400).json({ error: `${field} must be a non-negative number` });
+    }
+    data[field] = value;
+  }
   const dr = {
     id: createId('dr'),
-    ...pickAllowed(req.body, DAMAGE_REPORT_FIELDS),
+    ...data,
     status: 'PENDING',
     created_at: new Date().toISOString()
   };

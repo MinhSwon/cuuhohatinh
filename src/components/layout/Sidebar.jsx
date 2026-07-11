@@ -2,10 +2,10 @@
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
 import {
-  LayoutDashboard, Bell, BellRing, Users, Shield, Map, MessageSquare,
+  LayoutDashboard, Bell, BellRing, Users, Shield, MessageSquare,
   Navigation, AlertTriangle, FileText, BarChart3, Activity, Bot,
   Settings, LogOut, X, Home, Route, Droplets,
-  Building2, ClipboardList, Anchor
+  Building2, Anchor
 } from 'lucide-react';
 
 const adminNavSections = [
@@ -20,7 +20,7 @@ const adminNavSections = [
     label: 'Cảnh báo & SMS',
     items: [
       { to: '/admin/alerts', icon: BellRing, label: 'Quản lý cảnh báo' },
-      { to: '/admin/sms', icon: MessageSquare, label: 'SMS cảnh báo' },
+      { to: '/admin/sms', icon: MessageSquare, label: 'SMS điện thoại dự phòng' },
       { to: '/admin/coastal', icon: Anchor, label: 'Cảnh báo ven biển & Sạt lở' },
     ],
   },

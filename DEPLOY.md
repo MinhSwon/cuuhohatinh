@@ -51,6 +51,7 @@ SEED_CITIZEN_PASSWORD=doi-mat-khau-nguoi-dan-moi
 DB_CONNECT_RETRIES=8
 DB_CONNECT_RETRY_DELAY_MS=3000
 ALLOW_JSON_FALLBACK=false
+ENABLE_SMS_FALLBACK=false
 ```
 
 Ghi chu:
@@ -60,6 +61,7 @@ Ghi chu:
 - Khi co `DATABASE_URL`, Prisma se ket noi PostgreSQL va quan ly cac bang quan he.
 - Tren Render bat buoc cau hinh `DATABASE_URL`; backend se dung khoi dong neu PostgreSQL loi. `db.json` chi phu hop de chay local va khong duoc commit len Git.
 - Khong bat `ALLOW_JSON_FALLBACK=true` tren Render, vi o dia tam co the bi xoa khi restart/deploy.
+- De `ENABLE_SMS_FALLBACK=false` neu chi dung thong bao tai khoan realtime. Chi bat `true` khi eSMS da duoc cau hinh va kiem thu bang so dien thoai that.
 - `PGSSL=true` thuong can cho database tren hosting. Neu PostgreSQL chay local bang pgAdmin thi de `PGSSL=false`.
 - Neu Render bao `getaddrinfo ENOTFOUND dpg-...` luc khoi dong, thu tang `DB_CONNECT_RETRIES` hoac `DB_CONNECT_RETRY_DELAY_MS` de backend doi PostgreSQL san sang truoc khi thoat.
 - `JWT_SECRET` bat buoc tren Render/production. Co the tao bang `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"`.

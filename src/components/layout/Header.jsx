@@ -4,6 +4,91 @@ import { Menu, Bell, LogOut, ChevronDown } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useData } from '../../contexts/DataContext';
 
+function getNotificationDestination(role, notification) {
+  const type = notification?.type || '';
+  if (role === 'ADMIN' || role === 'SUPER_ADMIN') {
+    return type === 'RESCUE_REQUEST' || type === 'RESCUE_REQUEST_ASSIGNED'
+      ? '/admin/rescue-requests'
+      : '/admin/rescue-missions';
+  }
+  if (role === 'RESCUE_LEADER' || role === 'RESCUE_MEMBER') {
+    return type.includes('WARNING') ? '/rescue/warnings' : '/rescue/missions';
+  }
+  return type.includes('WARNING') ? '/citizen/warnings' : '/citizen';
+}
+
+function AccountNotificationBell({ currentUser, notifications, markNotificationRead, navigate }) {
+  const [open, setOpen] = useState(false);
+  const visible = useMemo(
+    () => notifications.filter(n => !n.user_id || n.user_id === currentUser?.id),
+    [notifications, currentUser?.id]
+  );
+  const unread = visible.filter(n => !n.is_read);
+
+  const openNotification = notification => {
+    markNotificationRead(notification.id);
+    setOpen(false);
+    navigate(getNotificationDestination(currentUser?.role, notification));
+  };
+
+  return (
+    <div style={{ position: 'relative' }}>
+      <button
+        type="button"
+        aria-label={`Thông báo tài khoản${unread.length ? `, ${unread.length} chưa đọc` : ''}`}
+        onClick={() => setOpen(value => !value)}
+        style={{
+          position: 'relative', background: unread.length ? '#fff7ed' : 'none',
+          border: `1px solid ${unread.length ? '#fed7aa' : 'transparent'}`,
+          borderRadius: 7, padding: '0.35rem', cursor: 'pointer', display: 'flex',
+          color: unread.length ? '#c2410c' : '#9e9282',
+        }}
+      >
+        <Bell size={17} />
+        {unread.length > 0 && (
+          <span style={{
+            position: 'absolute', top: -5, right: -5, minWidth: 16, height: 16,
+            padding: '0 3px', borderRadius: 999, background: '#dc2626', color: 'white',
+            fontSize: '0.58rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>{unread.length > 99 ? '99+' : unread.length}</span>
+        )}
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', right: 0, top: 'calc(100% + 8px)', width: 320,
+          maxHeight: 380, overflowY: 'auto', zIndex: 120, background: 'white',
+          border: '1px solid #e2dbd0', borderRadius: 12, boxShadow: '0 8px 24px rgba(42,37,32,0.14)',
+        }}>
+          <div style={{ padding: '0.75rem 1rem', fontWeight: 700, borderBottom: '1px solid #ede8e0' }}>
+            Thông báo tài khoản
+          </div>
+          {visible.slice(0, 15).map(notification => (
+            <button
+              type="button"
+              key={notification.id}
+              onClick={() => openNotification(notification)}
+              style={{
+                width: '100%', textAlign: 'left', padding: '0.75rem 1rem', cursor: 'pointer',
+                border: 0, borderBottom: '1px solid #f5f1eb',
+                background: notification.is_read ? 'white' : '#fff7ed',
+              }}
+            >
+              <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#2a2520' }}>{notification.title}</div>
+              <div style={{ fontSize: '0.68rem', color: '#786f66', marginTop: 3, lineHeight: 1.4 }}>{notification.message}</div>
+              <div style={{ fontSize: '0.61rem', color: '#aaa198', marginTop: 4 }}>
+                {new Date(notification.created_at).toLocaleString('vi-VN')}
+              </div>
+            </button>
+          ))}
+          {visible.length === 0 && (
+            <div style={{ padding: '1.5rem', textAlign: 'center', color: '#9e9282', fontSize: '0.75rem' }}>Chưa có thông báo</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AdminHeader({ onMenuClick }) {
   const { currentUser, logout } = useAuth();
   const { notifications, markNotificationRead, rescueRequests, realtimeStatus, lastBackendSyncAt, refreshBackend } = useData();
@@ -52,6 +137,12 @@ export function AdminHeader({ onMenuClick }) {
     setShowNotifs(false);
     if (supportCount > 0) navigate('/admin/rescue-missions');
     else navigate('/admin/rescue-requests');
+  };
+
+  const openNotification = notification => {
+    markNotificationRead(notification.id);
+    setShowNotifs(false);
+    navigate(getNotificationDestination(currentUser?.role, notification));
   };
 
   return (
@@ -183,7 +274,7 @@ export function AdminHeader({ onMenuClick }) {
                 {visibleNotifications.slice(0, 10).map(n => (
                   <div
                     key={n.id}
-                    onClick={() => markNotificationRead(n.id)}
+                    onClick={() => openNotification(n)}
                     style={{
                       padding: '0.7rem 1rem',
                       borderBottom: '1px solid #f5f1eb',
@@ -264,6 +355,7 @@ export function AdminHeader({ onMenuClick }) {
 
 export function RescueHeader({ onMenuClick }) {
   const { currentUser, logout } = useAuth();
+  const { notifications, markNotificationRead } = useData();
   const navigate = useNavigate();
   return (
     <header className="header" style={{ borderBottom: '2px solid #d5e8da' }}>
@@ -271,6 +363,12 @@ export function RescueHeader({ onMenuClick }) {
         <Menu size={18} />
       </button>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+        <AccountNotificationBell
+          currentUser={currentUser}
+          notifications={notifications}
+          markNotificationRead={markNotificationRead}
+          navigate={navigate}
+        />
         <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#3a6b4a', opacity: 0.85, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'white' }}>
           {currentUser?.full_name?.[0] || 'R'}
         </div>
@@ -285,6 +383,7 @@ export function RescueHeader({ onMenuClick }) {
 
 export function CitizenHeader({ onMenuClick }) {
   const { currentUser, logout } = useAuth();
+  const { notifications, markNotificationRead } = useData();
   const navigate = useNavigate();
   return (
     <header className="header" style={{ borderBottom: '2px solid #d0dced' }}>
@@ -292,6 +391,12 @@ export function CitizenHeader({ onMenuClick }) {
         <Menu size={18} />
       </button>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+        <AccountNotificationBell
+          currentUser={currentUser}
+          notifications={notifications}
+          markNotificationRead={markNotificationRead}
+          navigate={navigate}
+        />
         <div style={{ width: 28, height: 28, borderRadius: '50%', background: '#4a6fa5', opacity: 0.85, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.72rem', fontWeight: 600, color: 'white' }}>
           {currentUser?.full_name?.[0] || 'N'}
         </div>

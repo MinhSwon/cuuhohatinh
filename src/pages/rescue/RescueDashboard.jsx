@@ -3,21 +3,50 @@ import { useAuth } from '../../contexts/AuthContext';
 import { StatusBadge, LevelBadge } from '../../components/common/StatusBadge';
 import { haversineDistance, formatDistance } from '../../utils/haversine';
 import { Link } from 'react-router-dom';
-import { Activity, CheckCircle, MapPin, Clock, AlertTriangle, Phone } from 'lucide-react';
+import { Activity, CheckCircle, Clock, AlertTriangle } from 'lucide-react';
+import { useToast } from '../../contexts/ToastContext';
 
 export default function RescueDashboard() {
   const { currentUser } = useAuth();
-  const { rescueMissions, rescueTeams, rescueRequests, floodWarnings } = useData();
+  const { rescueMissions, rescueTeams, floodWarnings, updateOwnTeamStatus } = useData();
+  const toast = useToast();
 
   const myTeam = rescueTeams.find(t =>
     t.leader_user_id === currentUser?.id ||
+    t.leader_id === currentUser?.id ||
+    t.user_id === currentUser?.id ||
+    (Array.isArray(t.member_user_ids) && t.member_user_ids.includes(currentUser?.id)) ||
     currentUser?.team_id === t.id
-  ) || rescueTeams[0];
+  );
 
   const myMissions = rescueMissions.filter(m => m.rescue_team_id === myTeam?.id);
   const activeMissions = myMissions.filter(m => !['RESCUED', 'TRANSFERRED_SAFEZONE', 'CANCELLED', 'UNREACHABLE'].includes(m.status));
   const completedMissions = myMissions.filter(m => ['RESCUED', 'TRANSFERRED_SAFEZONE'].includes(m.status));
   const activeWarnings = floodWarnings.filter(w => w.status === 'PUBLISHED');
+
+  const handleTeamStatusChange = async () => {
+    if (!myTeam) return;
+    const nextStatus = myTeam.status === 'AVAILABLE' ? 'BUSY' : 'AVAILABLE';
+    try {
+      await updateOwnTeamStatus(myTeam.id, nextStatus);
+      toast.success(nextStatus === 'AVAILABLE' ? 'Đội đã chuyển sang Sẵn sàng' : 'Đội đã chuyển sang Bận');
+    } catch (err) {
+      toast.error(err.response?.data?.error === 'Team still has active missions'
+        ? 'Không thể chuyển sang Sẵn sàng khi đội còn nhiệm vụ đang xử lý.'
+        : 'Không thể cập nhật trạng thái đội.');
+    }
+  };
+
+  if (!myTeam) {
+    return (
+      <div className="page-container">
+        <div className="card" style={{ padding: '2rem', textAlign: 'center' }}>
+          <h1 className="page-title">Tài khoản chưa được liên kết với đội cứu hộ</h1>
+          <p className="page-subtitle">Vui lòng yêu cầu Admin cập nhật trường tài khoản trưởng đội trước khi nhận nhiệm vụ.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="page-container">
@@ -27,6 +56,9 @@ export default function RescueDashboard() {
           {myTeam ? `Đội: ${myTeam.team_name} · ${myTeam.area_name}` : 'Đội cứu hộ'}
           {myTeam && <span style={{ marginLeft: 12 }}><StatusBadge status={myTeam.status} /></span>}
         </p>
+        <button type="button" className="btn btn-secondary btn-sm" onClick={handleTeamStatusChange}>
+          Chuyển sang {myTeam.status === 'AVAILABLE' ? 'Bận' : 'Sẵn sàng'}
+        </button>
       </div>
 
       {/* Active warnings */}

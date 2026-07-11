@@ -2,13 +2,12 @@ import { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { Eye, UserCheck, X, Filter, ChevronDown, AlertTriangle, Phone, MapPin, Users } from 'lucide-react';
+import { Eye, UserCheck, X, AlertTriangle } from 'lucide-react';
 import { StatusBadge, LevelBadge } from '../../components/common/StatusBadge';
 import {
   getAssignmentWarnings,
   getRequestAddress,
   getRequestName,
-  getRequestPhone,
   getTeamRecommendations,
   isNeedsVerification,
 } from '../../utils/rescueCoordination';
@@ -196,6 +195,8 @@ export default function RescueRequests() {
   const [isSemanticActive, setIsSemanticActive] = useState(false);
   const [semanticResults, setSemanticResults] = useState([]);
   const [searching, setSearching] = useState(false);
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
 
   const handleSemanticSearch = async (e) => {
     if (e) e.preventDefault();
@@ -204,6 +205,7 @@ export default function RescueRequests() {
       return;
     }
     setSearching(true);
+    setPage(1);
     const results = await searchSemantics(semanticQuery, 'requests');
     setSemanticResults(results);
     setIsSemanticActive(true);
@@ -214,6 +216,7 @@ export default function RescueRequests() {
     setSemanticQuery('');
     setIsSemanticActive(false);
     setSemanticResults([]);
+    setPage(1);
   };
 
   // If semantic search is active, use the ranked semantic results, otherwise standard list
@@ -226,6 +229,9 @@ export default function RescueRequests() {
     if (filterSOS && !r.sos_mode) return false;
     return true;
   });
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const paginated = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   const sosCount = rescueRequests.filter(r => r.sos_mode && r.status === 'PENDING').length;
 
@@ -281,7 +287,7 @@ export default function RescueRequests() {
           { label: 'Đang xử lý', count: rescueRequests.filter(r => ['ASSIGNED','ACCEPTED','MOVING','NEAR_VICTIM','ARRIVED_CONFIRMED','RESCUING'].includes(r.status)).length, color: '#3b82f6', bg: '#eff6ff' },
           { label: 'Cứu thành công', count: rescueRequests.filter(r => ['RESCUED','TRANSFERRED_SAFEZONE'].includes(r.status)).length, color: '#10b981', bg: '#f0fdf4' },
           { label: '🆘 SOS chờ xử lý', count: sosCount, color: '#dc2626', bg: '#fef2f2' },
-          { label: 'Can xac minh', count: rescueRequests.filter(isNeedsVerification).length, color: '#d97706', bg: '#fffbeb' },
+          { label: 'Cần xác minh', count: rescueRequests.filter(isNeedsVerification).length, color: '#d97706', bg: '#fffbeb' },
           { label: 'Gần nhiệm vụ khác', count: rescueRequests.filter(r => r.nearby_active_mission_id || r.duplicate_group_id).length, color: '#7c3aed', bg: '#f5f3ff' },
         ].map(s => (
           <div key={s.label} style={{ background: s.bg, border: `1px solid ${s.color}20`, borderRadius: 10, padding: '0.75rem', textAlign: 'center' }}>
@@ -324,7 +330,7 @@ export default function RescueRequests() {
       {/* Filters */}
       <div className="filter-bar">
         <button
-          onClick={() => setFilterSOS(!filterSOS)}
+          onClick={() => { setFilterSOS(!filterSOS); setPage(1); }}
           style={{
             display: 'flex', alignItems: 'center', gap: '0.375rem',
             padding: '0.375rem 0.875rem', borderRadius: 8, cursor: 'pointer', fontSize: '0.78rem', fontWeight: 700,
@@ -335,15 +341,15 @@ export default function RescueRequests() {
         >
           🆘 {filterSOS ? `SOS (${sosCount})` : 'Lọc SOS'}
         </button>
-        <select className="form-input form-select" style={{ width: 160 }} value={filterArea} onChange={e => setFilterArea(e.target.value)}>
+        <select className="form-input form-select" style={{ width: 160 }} value={filterArea} onChange={e => { setFilterArea(e.target.value); setPage(1); }}>
           <option value="">Tất cả khu vực</option>
           {areas.map(a => <option key={a.id} value={a.id}>{a.old_name}</option>)}
         </select>
-        <select className="form-input form-select" style={{ width: 150 }} value={filterLevel} onChange={e => setFilterLevel(e.target.value)}>
+        <select className="form-input form-select" style={{ width: 150 }} value={filterLevel} onChange={e => { setFilterLevel(e.target.value); setPage(1); }}>
           <option value="">Tất cả mức độ</option>
           {URGENCY_LEVELS.map(l => <option key={l} value={l}>{l === 'LOW' ? 'Thấp' : l === 'MEDIUM' ? 'Trung bình' : l === 'HIGH' ? 'Cao' : 'Khẩn cấp'}</option>)}
         </select>
-        <select className="form-input form-select" style={{ width: 160 }} value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+        <select className="form-input form-select" style={{ width: 160 }} value={filterStatus} onChange={e => { setFilterStatus(e.target.value); setPage(1); }}>
           <option value="">Tất cả trạng thái</option>
           {STATUS_FILTER_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
         </select>
@@ -368,22 +374,22 @@ export default function RescueRequests() {
             <tbody>
               {filtered.length === 0 ? (
                 <tr><td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8' }}>Không có yêu cầu nào</td></tr>
-              ) : filtered.map(r => (
+              ) : paginated.map(r => (
                 <tr key={r.id} style={{ background: r.sos_mode && r.status === 'PENDING' ? '#fff5f5' : r.status === 'PENDING' && r.emergency_level === 'EMERGENCY' ? '#fef8f8' : 'white', borderLeft: r.sos_mode ? '3px solid #ef4444' : 'none' }}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: 2 }}>
                       {r.sos_mode && <span style={{ background: '#fef2f2', color: '#dc2626', borderRadius: 4, padding: '1px 5px', fontSize: '0.62rem', fontWeight: 800, border: '1px solid #fecaca' }}>🆘 SOS</span>}
                       <span style={{ fontWeight: 600, fontSize: '0.82rem', color: '#0f172a' }}>{getRequestName(r)}</span>
                       {isSemanticActive && r.similarity !== undefined && (
-                        <span style={{ background: '#e0f2fe', color: '#0369a1', borderRadius: 4, padding: '1px 5px', fontSize: '0.65rem', fontWeight: 700 }} title="Độ tương hợp ngữ nghĩa AI">
-                          🧠 {Math.round(r.similarity * 100)}%
+                        <span style={{ background: '#e0f2fe', color: '#0369a1', borderRadius: 4, padding: '1px 5px', fontSize: '0.65rem', fontWeight: 700 }} title={r.search_match === 'EXACT' ? 'Khớp chính xác nội dung tìm kiếm' : 'Độ tương hợp ngữ nghĩa AI'}>
+                          {r.search_match === 'EXACT' ? '🎯 Khớp chính xác' : `🧠 ${Math.round(r.similarity * 100)}%`}
                         </span>
                       )}
                     </div>
                     <a href={`tel:${r.phone}`} style={{ fontSize: '0.72rem', color: '#3b82f6', textDecoration: 'none' }}>{r.phone}</a>
                     <div style={{ fontSize: '0.68rem', color: '#94a3b8' }}>👥 {r.number_of_people} người</div>
                     {r.requester_type !== 'SELF' && <div style={{ fontSize: '0.66rem', color: '#92400e', fontWeight: 700 }}>Báo hộ: {r.reporter_phone || 'chưa có SĐT'}</div>}
-                    {isNeedsVerification(r) && <div style={{ fontSize: '0.66rem', color: '#dc2626', fontWeight: 700 }}>Can xac minh vi tri</div>}
+                    {isNeedsVerification(r) && <div style={{ fontSize: '0.66rem', color: '#dc2626', fontWeight: 700 }}>Cần xác minh vị trí</div>}
                   </td>
                   <td style={{ fontSize: '0.75rem' }}>
                     <div style={{ fontWeight: 500 }}>{r.area_name}</div>
@@ -430,6 +436,19 @@ export default function RescueRequests() {
           </table>
         </div>
       </div>
+
+      {filtered.length > pageSize && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.875rem' }}>
+          <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+            Hiển thị {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, filtered.length)} trong {filtered.length} yêu cầu
+          </span>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setPage(currentPage - 1)}>Trang trước</button>
+            <span style={{ fontSize: '0.72rem', fontWeight: 700 }}>Trang {currentPage}/{totalPages}</span>
+            <button type="button" className="btn btn-secondary btn-sm" disabled={currentPage === totalPages} onClick={() => setPage(currentPage + 1)}>Trang sau</button>
+          </div>
+        </div>
+      )}
 
       {assignModal && <AssignModal request={assignModal} teams={rescueTeams} missions={rescueMissions} onAssign={handleAssign} onClose={() => setAssignModal(null)} />}
       {detailModal && <DetailModal request={detailModal} onClose={() => setDetailModal(null)} />}

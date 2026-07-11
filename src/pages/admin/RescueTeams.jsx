@@ -2,9 +2,9 @@ import { useState } from 'react';
 import { useData } from '../../contexts/DataContext';
 import { useToast } from '../../contexts/ToastContext';
 import { StatusBadge } from '../../components/common/StatusBadge';
-import { Plus, Edit2, Trash2, Users, Phone, X, ChevronDown } from 'lucide-react';
+import { Plus, Edit2, Trash2, Users, X } from 'lucide-react';
 
-function TeamForm({ initial, onSave, onClose, areas }) {
+function TeamForm({ initial, onSave, onClose, areas, rescueUsers }) {
   const [form, setForm] = useState(initial || {
     team_name: '', area_id: '', leader_name: '', phone: '',
     vehicle_type: '', member_count: 5, max_active_missions: 2,
@@ -26,8 +26,25 @@ function TeamForm({ initial, onSave, onClose, areas }) {
           </select>
         </div>
         <div>
-          <label className="form-label">Trưởng đội</label>
-          <input className="form-input" value={form.leader_name} onChange={e => setForm(f => ({ ...f, leader_name: e.target.value }))} placeholder="Họ tên trưởng đội" />
+          <label className="form-label">Tài khoản trưởng đội *</label>
+          <select
+            className="form-input form-select"
+            value={form.leader_user_id || form.leader_id || ''}
+            onChange={e => {
+              const user = rescueUsers.find(item => item.id === e.target.value);
+              setForm(current => ({
+                ...current,
+                leader_user_id: user?.id || '',
+                leader_id: user?.id || '',
+                leader_name: user?.full_name || '',
+                phone: current.phone || user?.phone || '',
+              }));
+            }}
+            required
+          >
+            <option value="">-- Chọn tài khoản cứu hộ --</option>
+            {rescueUsers.map(user => <option key={user.id} value={user.id}>{user.full_name} ({user.email || user.phone})</option>)}
+          </select>
         </div>
         <div>
           <label className="form-label">Số điện thoại *</label>
@@ -42,7 +59,7 @@ function TeamForm({ initial, onSave, onClose, areas }) {
           <input type="number" min="1" className="form-input" value={form.member_count} onChange={e => setForm(f => ({ ...f, member_count: parseInt(e.target.value) }))} />
         </div>
         <div>
-          <label className="form-label">Nhiem vu dong thoi</label>
+          <label className="form-label">Nhiệm vụ đồng thời</label>
           <input type="number" min="1" className="form-input" value={form.max_active_missions || 2} onChange={e => setForm(f => ({ ...f, max_active_missions: parseInt(e.target.value) }))} />
         </div>
         <div>
@@ -50,7 +67,7 @@ function TeamForm({ initial, onSave, onClose, areas }) {
           <input type="number" min="1" className="form-input" value={form.max_people_per_trip || form.vehicle_capacity || 1} onChange={e => setForm(f => ({ ...f, max_people_per_trip: parseInt(e.target.value), vehicle_capacity: parseInt(e.target.value) }))} />
         </div>
         <div>
-          <label className="form-label">Ban kinh phuc vu (km)</label>
+          <label className="form-label">Bán kính phục vụ (km)</label>
           <input type="number" min="1" className="form-input" value={form.service_radius_km || 10} onChange={e => setForm(f => ({ ...f, service_radius_km: parseInt(e.target.value) }))} />
         </div>
         <div>
@@ -76,11 +93,12 @@ function TeamForm({ initial, onSave, onClose, areas }) {
 }
 
 export default function RescueTeams() {
-  const { rescueTeams, createTeam, updateTeam, deleteTeam, rescueMissions, areas } = useData();
+  const { rescueTeams, createTeam, updateTeam, deleteTeam, rescueMissions, areas, users } = useData();
   const toast = useToast();
   const [showForm, setShowForm] = useState(false);
   const [editTeam, setEditTeam] = useState(null);
   const [filterStatus, setFilterStatus] = useState('');
+  const rescueUsers = users.filter(user => ['RESCUE_LEADER', 'RESCUE_MEMBER'].includes(user.role) && user.status === 'ACTIVE');
 
   const filtered = filterStatus ? rescueTeams.filter(t => t.status === filterStatus) : rescueTeams;
 
@@ -210,7 +228,7 @@ export default function RescueTeams() {
               <button onClick={() => { setShowForm(false); setEditTeam(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8' }}><X size={20} /></button>
             </div>
             <div style={{ padding: '1.5rem' }}>
-              <TeamForm initial={editTeam} onSave={handleSave} onClose={() => { setShowForm(false); setEditTeam(null); }} areas={areas} />
+              <TeamForm initial={editTeam} onSave={handleSave} onClose={() => { setShowForm(false); setEditTeam(null); }} areas={areas} rescueUsers={rescueUsers} />
             </div>
           </div>
         </div>

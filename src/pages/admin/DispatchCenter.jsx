@@ -189,7 +189,7 @@ export default function DispatchCenter() {
                   <div>
                     <div style={{ fontSize: '0.75rem', fontWeight: 600 }}>{getRequestName(r)}</div>
                     <div style={{ fontSize: '0.68rem', color: '#64748b' }}>📍 {r.area_name}</div>
-                    {isNeedsVerification(r) && <div style={{ fontSize: '0.66rem', color: '#dc2626', fontWeight: 700 }}>Can xac minh vi tri</div>}
+                    {isNeedsVerification(r) && <div style={{ fontSize: '0.66rem', color: '#dc2626', fontWeight: 700 }}>Cần xác minh vị trí</div>}
                   </div>
                   <LevelBadge level={r.emergency_level} />
                 </div>
@@ -311,7 +311,7 @@ export default function DispatchCenter() {
                     <div style={{ fontWeight: 700, color: '#dc2626' }}>Đang chờ phân công: {getRequestName(request)}</div>
                     <div style={{ color: '#64748b', marginTop: 4 }}>{getRequestAddress(request)}</div>
                     <div style={{ marginTop: 4 }}><LevelBadge level={request.emergency_level} /></div>
-                    {isNeedsVerification(request) && <div style={{ marginTop: 4, color: '#dc2626', fontWeight: 700 }}>Can xac minh vi tri</div>}
+                    {isNeedsVerification(request) && <div style={{ marginTop: 4, color: '#dc2626', fontWeight: 700 }}>Cần xác minh vị trí</div>}
                   </div>
                 </Popup>
               </Marker>

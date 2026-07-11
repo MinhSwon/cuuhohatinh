@@ -260,8 +260,8 @@ export default function AlertsAndSMS() {
     <div className="page-container">
       <div className="page-header">
         <div>
-          <h1 className="page-title">Quản lý SMS cảnh báo</h1>
-          <p className="page-subtitle">Gửi SMS cứu hộ thật qua eSMS và theo dõi lịch sử gửi tin</p>
+          <h1 className="page-title">SMS điện thoại dự phòng</h1>
+          <p className="page-subtitle">Kênh dự phòng qua eSMS; thông báo tài khoản realtime là kênh điều phối chính</p>
         </div>
         <button className="btn btn-primary" onClick={() => setShowSend(true)}>
           <Send size={16} /> Gửi SMS mới

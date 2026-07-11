@@ -597,6 +597,13 @@ export function DataProvider({ children }) {
     }
   }, []);
 
+  const updateOwnTeamStatus = useCallback(async (id, status) => {
+    const res = await axios.patch(`/api/teams/${id}/status`, { status });
+    const team = res.data;
+    setRescueTeams(prev => prev.map(item => item.id === id ? team : item));
+    return team;
+  }, []);
+
   const sendSmsNotification = useCallback(async (data) => {
     const res = await axios.post('/api/sms/send', data);
     const dbRes = await axios.get('/api/db');
@@ -679,7 +686,7 @@ export function DataProvider({ children }) {
       createWarning, updateWarning, deleteWarning,
       createRescueRequest, updateRescueRequest, assignTeamToRequest,
       updateMissionStatus,
-      createTeam, updateTeam, deleteTeam,
+      createTeam, updateTeam, updateOwnTeamStatus, deleteTeam,
       createSafeZone, updateSafeZone, deleteSafeZone,
       createRoute, updateRoute, deleteRoute,
       addSmsLog, sendSmsNotification,
